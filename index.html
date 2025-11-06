@@ -44,36 +44,51 @@
   <script>
     let provider, signer, userAddress;
 
-    // Inicializa Web3Modal
+    // Inicializa Web3Modal com suporte universal
     const web3Modal = new window.Web3Modal.default({
       cacheProvider: false,
       providerOptions: {
         walletconnect: {
           package: window.WalletConnectProvider.default,
           options: {
-            infuraId: "YOUR_INFURA_ID" // opcional, apenas para redes EVM públicas
+            rpc: {
+              1: "https://rpc.ankr.com/eth",       // Ethereum
+              8453: "https://mainnet.base.org",     // Base
+              137: "https://polygon-rpc.com",       // Polygon
+              56: "https://bsc-dataseed.binance.org" // BSC
+            }
           }
         }
       }
     });
 
-    // Conectar carteira
-    document.getElementById("connectBtn").addEventListener("click", async () => {
+    // Detectar e conectar automaticamente ao Ethereum injetado (MetaMask, Brave, Coinbase etc.)
+    async function connectWallet() {
       try {
-        const instance = await web3Modal.connect();
+        let instance;
+        if (window.ethereum) {
+          instance = window.ethereum;
+          await instance.request({ method: 'eth_requestAccounts' });
+        } else {
+          instance = await web3Modal.connect();
+        }
+
         provider = new ethers.BrowserProvider(instance);
         signer = await provider.getSigner();
         userAddress = await signer.getAddress();
-
         const network = await provider.getNetwork();
+
         document.getElementById("walletInfo").innerHTML =
           `🟢 ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}<br>🌐 ${network.name}`;
       } catch (err) {
         console.error(err);
+        alert("❌ Erro ao conectar carteira");
       }
-    });
+    }
 
-    // Função de Mint (exemplo genérico — apenas simulação por enquanto)
+    document.getElementById("connectBtn").addEventListener("click", connectWallet);
+
+    // Função de Mint (simulação)
     document.getElementById("mintBtn").addEventListener("click", async () => {
       const file = document.getElementById("fileInput").files[0];
       if (!file) return alert("Selecione uma imagem primeiro!");
@@ -81,13 +96,12 @@
 
       document.getElementById("status").textContent = "🚀 Enviando e mintando NFT...";
 
-      // Aqui você pode integrar com NFT.Storage, Pinata, etc.
-      await new Promise(r => setTimeout(r, 2000)); // Simulação
+      // Simulação (colocaremos IPFS e contrato real depois)
+      await new Promise(r => setTimeout(r, 2000));
 
       document.getElementById("status").innerHTML = `
         ✅ NFT criado com sucesso!<br>
-        (Simulação)<br>
-        <span class="text-xs">Em breve: integração com IPFS e contrato real.</span>
+        <span class="text-xs">(Simulação — pronto pra integração com IPFS e Base Mainnet)</span>
       `;
     });
   </script>
