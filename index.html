@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mint Base</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.4/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 40px;
+      background: #f4f4f4;
+    }
+    input, button {
+      margin: 10px;
+      padding: 10px;
+    }
+    button {
+      background: #0052ff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>Mint NFT na Base</h2>
+  <button id="connect">Conectar Carteira</button><br/>
+  <input type="file" id="fileInput" accept="image/*" /><br/>
+  <button id="mint">Mint NFT</button>
+  <p id="status"></p>
+
+  <script>
+    // 👉 Altere aqui com seus dados
+    const CONTRACT_ADDRESS = "COLOQUE_O_ENDERECO_DO_SEU_CONTRATO_AQUI";
+    const NFT_STORAGE_KEY = "COLOQUE_SUA_CHAVE_AQUI"; // apenas para teste local!
+    const ABI = ["function mintNFT(string memory tokenURI) public"];
+
+    const status = document.getElementById("status");
+    const connectBtn = document.getElementById("connect");
+    const mintBtn = document.getElementById("mint");
+    const fileInput = document.getElementById("fileInput");
+    let signer, contract;
+
+    connectBtn.onclick = async () => {
+      if (!window.ethereum) return alert("MetaMask não encontrada!");
+      await ethereum.request({ method: "eth_requestAccounts" });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      status.textContent = "Carteira conectada ✅";
+    };
+
+    mintBtn.onclick = async () => {
+      if (!fileInput.files.length) return alert("Escolha uma imagem!");
+      const file = fileInput.files[0];
+      status.textContent = "Enviando imagem para IPFS...";
+
+      const formData = new FormData();
+      formData.append("file", file);
+      const upload = await fetch("https://api.nft.storage/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${NFT_STORAGE_KEY}` },
+        body: formData,
+      });
+      const data = await upload.json();
+      const imageCID = data.value.cid;
+
+      const metadata = {
+        name: file.name,
+        description: "NFT criada na rede Base",
+        image: `ipfs://${imageCID}`,
+      };
+
+      const metaUpload = await fetch("https://api.nft.storage/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${NFT_STORAGE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(metadata),
+      });
+      const metaData = await metaUpload.json();
+      const tokenURI = `ipfs://${metaData.value.cid}`;
+
+      status.textContent = "Criando NFT...";
+      const tx = await contract.mintNFT(tokenURI);
+      await tx.wait();
+      status.textContent = "✅ NFT criada com sucesso!";
+    };
+  </script>
+</body>
+    </html>
