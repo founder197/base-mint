@@ -95,3 +95,179 @@
     resetPositions();
     cancelAnimationFrame(raf);
     loop();
+  }
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  function draw() {
+    // background
+    ctx.fillStyle = '#020214';
+    ctx.fillRect(0,0,W,H);
+
+    // middle dashed line
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12,10]);
+    ctx.beginPath();
+    ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // paddles
+    ctx.fillStyle = '#e6e6e6';
+    roundRect(ctx, state.left.x, state.left.y, paddleW, paddleH, 6, true);
+    roundRect(ctx, state.right.x, state.right.y, paddleW, paddleH, 6, true);
+
+    // ball
+    ctx.beginPath();
+    ctx.fillStyle = '#2dd4bf';
+    ctx.arc(state.ball.x, state.ball.y, ballR, 0, Math.PI*2);
+    ctx.fill();
+
+    // scores
+    scoreEl.textContent = `${state.left.score} : ${state.right.score}`;
+  }
+
+  function roundRect(ctx,x,y,w,h,r,fill){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+    if(fill) ctx.fill();
+  }
+
+  // Update physics
+  function update(dt) {
+    // move ball
+    state.ball.x += state.ball.vx * dt;
+    state.ball.y += state.ball.vy * dt;
+
+    // top/bottom collision
+    if(state.ball.y - ballR < 0){
+      state.ball.y = ballR;
+      state.ball.vy *= -1;
+    } else if(state.ball.y + ballR > H){
+      state.ball.y = H - ballR;
+      state.ball.vy *= -1;
+    }
+
+    // left paddle collision
+    if(state.ball.x - ballR < state.left.x + paddleW){
+      if(state.ball.y > state.left.y && state.ball.y < state.left.y + paddleH){
+        state.ball.x = state.left.x + paddleW + ballR;
+        state.ball.vx *= -1.03; // speed up a bit
+        // add spin based on where it hit
+        const rel = (state.ball.y - (state.left.y + paddleH/2)) / (paddleH/2);
+        state.ball.vy += rel * 4;
+      } else if(state.ball.x < 0){
+        // right scores
+        state.right.score++;
+        resetPositions();
+      }
+    }
+
+    // right paddle collision
+    if(state.ball.x + ballR > state.right.x){
+      if(state.ball.y > state.right.y && state.ball.y < state.right.y + paddleH){
+        state.ball.x = state.right.x - ballR;
+        state.ball.vx *= -1.03;
+        const rel = (state.ball.y - (state.right.y + paddleH/2)) / (paddleH/2);
+        state.ball.vy += rel * 4;
+      } else if(state.ball.x > W){
+        // left scores
+        state.left.score++;
+        resetPositions();
+      }
+    }
+
+    // simple AI for right paddle
+    if(state.aiOn){
+      const target = state.ball.y - paddleH/2;
+      const diff = target - state.right.y;
+      state.right.y += clamp(diff, -6*state.speedMult, 6*state.speedMult) * dt * 60;
+      state.right.y = clamp(state.right.y, 0, H - paddleH);
+    }
+
+    // ensure paddles stay inside
+    state.left.y = clamp(state.left.y, 0, H - paddleH);
+    state.right.y = clamp(state.right.y, 0, H - paddleH);
+  }
+
+  // main loop
+  let last = performance.now();
+  function loop(now){
+    raf = requestAnimationFrame(loop);
+    now = now || performance.now();
+    const dt = Math.min(1/30, (now - last)/1000);
+    last = now;
+    if(state.running){
+      update(dt);
+      draw();
+    }
+  }
+
+  // input handlers
+  // keyboard: arrows move left paddle
+  window.addEventListener('keydown', e => {
+    if(e.key === 'ArrowUp') state.left.y -= 24;
+    if(e.key === 'ArrowDown') state.left.y += 24;
+  });
+
+  // mouse / touch: drag on canvas to move left paddle
+  let dragging = false;
+  function pointerDown(e){
+    dragging = true;
+    moveToPointer(e);
+  }
+  function pointerUp(){ dragging = false; }
+  function moveToPointer(e){
+    const rect = canvas.getBoundingClientRect();
+    const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+    const y = clientY - rect.top;
+    state.left.y = y - paddleH/2;
+  }
+  canvas.addEventListener('mousedown', pointerDown);
+  canvas.addEventListener('touchstart', pointerDown, {passive:true});
+  window.addEventListener('mouseup', pointerUp);
+  window.addEventListener('touchend', pointerUp);
+  window.addEventListener('mousemove', e => { if(dragging) moveToPointer(e); });
+  window.addEventListener('touchmove', e => { if(dragging) moveToPointer(e); }, {passive:true});
+
+  // start button
+  startBtn.addEventListener('click', () => {
+    state.running = true;
+    state.left.score = 0;
+    state.right.score = 0;
+    resetPositions();
+    cancelAnimationFrame(raf);
+    last = performance.now();
+    loop();
+  });
+
+  aiToggle.addEventListener('click', () => {
+    state.aiOn = !state.aiOn;
+    aiToggle.textContent = state.aiOn ? 'AI: ON' : 'AI: OFF';
+  });
+
+  // initial small setup
+  // set canvas CSS size based on wrap width
+  function setupCanvasSize(){
+    const wrap = document.getElementById('gameWrap');
+    const w = Math.min(900, Math.max(320, wrap.clientWidth - 24));
+    canvas.style.width = w + 'px';
+    canvas.style.height = Math.floor(w * 0.65) + 'px';
+    resize();
+    state.right.x = parseFloat(getComputedStyle(canvas).width) - 20 - paddleW;
+    resetPositions();
+    draw();
+  }
+  setupCanvasSize();
+  window.addEventListener('orientationchange', setupCanvasSize);
+  window.addEventListener('resize', setupCanvasSize);
+})();
+</script>
+</body>
+</html>
