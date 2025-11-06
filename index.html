@@ -2,419 +2,483 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Gravity Painter — Jogo HTML5</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Mini Race — Jogo de Corrida (HTML5)</title>
 <style>
   :root{
-    --bg:#0b1220; --panel:#0b1530; --accent:#56f0d1; --muted:#a8b3c7; --danger:#ff6b6b;
+    --bg:#0b1220; --panel:#071126; --accent:#ffcc33; --accent2:#56e6c2; --muted:#9fb0c8;
   }
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:var(--muted)}
-  body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051025,#071427);padding:12px}
-  .wrap{width:min(980px,98vw);max-width:980px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
-  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,#020617,#07102a);color:var(--muted)}
+  .wrap{width:min(980px,98vw);max-width:980px;margin:12px auto;padding:12px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
   h1{font-size:18px;margin:0;color:white}
-  .controls{display:flex;gap:8px;align-items:center}
-  button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px 10px;border-radius:8px;cursor:pointer}
-  button.primary{border-color:var(--accent);color:var(--accent)}
-  #hud{display:flex;gap:10px;align-items:center;font-size:14px}
-  canvas{width:100%;height:64vh;max-height:720px;border-radius:10px;background:linear-gradient(180deg,#061122,#00121a);display:block}
-  .instr{font-size:13px;opacity:0.9;margin-top:8px}
-  .footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px}
-  .meter{font-weight:700;color:var(--accent)}
-  .small{font-size:13px;opacity:0.9}
-  @media (max-width:480px){ canvas{height:62vh} h1{font-size:16px} }
+  .hud{display:flex;gap:10px;align-items:center;font-weight:600}
+  .btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px 10px;border-radius:8px;cursor:pointer}
+  .btn.primary{border-color:var(--accent);color:var(--accent)}
+  canvas{width:100%;height:64vh;max-height:760px;border-radius:10px;display:block;background:#061427}
+  .controls-row{display:flex;gap:8px;align-items:center;margin-top:8px;justify-content:space-between}
+  .small{font-size:13px;color:var(--muted)}
+  .overlay{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .panel{background:rgba(3,6,9,0.65);padding:12px;border-radius:10px;color:white;backdrop-filter:blur(4px)}
+  .touch-btn{position:fixed;bottom:18px;width:40%;height:64px;border-radius:12px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:space-around;left:10px;right:10px;margin:auto;max-width:980px}
+  .small-btn{padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--muted)}
+  @media (max-width:520px){
+    .touch-btn{height:72px}
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Gravity Painter</h1>
-      <div class="controls">
-        <div id="hud">
-          <span>Level <strong id="level">1</strong></span>
-          <span class="meter" id="score">0 / 8</span>
-          <span id="time">—</span>
-        </div>
-        <button id="reset">Reiniciar</button>
-        <button id="hint">Dica</button>
-        <button id="auto" class="primary">Modo: Pintar</button>
-      </div>
-    </header>
-
-    <canvas id="c"></canvas>
-
-    <div class="instr">
-      Toque/arraste para **pintar vetores de gravidade**. As bolinhas seguem a direção local. Pinte com diferentes forças segurando SHIFT (desktop) ou usando o botão "Modo" (mobile). Objetivo: levar as bolinhas para a cesta dentro do tempo.
+<div class="wrap">
+  <header>
+    <h1>Mini Race</h1>
+    <div class="hud">
+      <div>Velocidade: <span id="speed">0</span></div>
+      <div>Pontuação: <span id="score">0</span></div>
+      <div>Recorde: <span id="best">0</span></div>
     </div>
+  </header>
 
-    <div class="footer">
-      <div class="small">Pinte: arraste para definir direção e intensidade. Clique curto cria um campo pequeno. Segure Ctrl/Shift para força.</div>
-      <div class="small">Feito por um assistente — jogo original, single-file.</div>
+  <div style="position:relative;">
+    <canvas id="game"></canvas>
+
+    <div id="overlay" class="overlay" style="pointer-events:none">
+      <div id="menu" class="panel" style="pointer-events:auto">
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center">
+          <button id="startBtn" class="btn primary">Iniciar</button>
+          <button id="resumeBtn" class="btn" style="display:none">Continuar</button>
+          <button id="resetBtn" class="btn">Reiniciar</button>
+        </div>
+        <div style="margin-top:8px;text-align:center" class="small">
+          Controles: ← → / A D / toque nas laterais do ecrã. Incluir tilt nas configurações (permite inclinar o celular).
+        </div>
+      </div>
     </div>
   </div>
 
+  <div class="controls-row">
+    <div class="small">Evite carros e barreiras — pegue power-ups para +velocidade ou escudo.</div>
+    <div>
+      <button id="tiltBtn" class="btn small-btn">Tilt: OFF</button>
+      <button id="soundBtn" class="btn small-btn">Som: ON</button>
+    </div>
+  </div>
+
+  <div class="touch-btn" id="touchControls" style="display:none;position:relative">
+    <button id="leftTouch" class="small-btn" style="width:45%">⟵</button>
+    <button id="rightTouch" class="small-btn" style="width:45%">⟶</button>
+  </div>
+</div>
+
 <script>
 (() => {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d', { alpha: false });
-
-  // HUD
-  const levelEl = document.getElementById('level');
+  // Canvas setup
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', {alpha: false});
   const scoreEl = document.getElementById('score');
-  const timeEl = document.getElementById('time');
-  const resetBtn = document.getElementById('reset');
-  const hintBtn = document.getElementById('hint');
-  const autoBtn = document.getElementById('auto');
+  const speedEl = document.getElementById('speed');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const menu = document.getElementById('menu');
+  const startBtn = document.getElementById('startBtn');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const tiltBtn = document.getElementById('tiltBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const touchControls = document.getElementById('touchControls');
+  const leftTouch = document.getElementById('leftTouch');
+  const rightTouch = document.getElementById('rightTouch');
 
-  // sizing
-  function fit() {
+  // responsive sizing
+  function fit(){
     const ratio = devicePixelRatio || 1;
-    const w = canvas.clientWidth || canvas.parentElement.clientWidth;
-    const h = Math.min(window.innerHeight*0.64, 720);
-    canvas.style.height = h + 'px';
+    canvas.style.height = Math.min(window.innerHeight * 0.64, 760) + 'px';
     canvas.width = Math.floor(canvas.clientWidth * ratio);
-    canvas.height = Math.floor(h * ratio);
+    canvas.height = Math.floor(parseFloat(getComputedStyle(canvas).height) * ratio);
     ctx.setTransform(ratio,0,0,ratio,0,0);
   }
   window.addEventListener('resize', fit);
   fit();
 
-  // game state
+  // Game variables
   let W = canvas.clientWidth, H = parseFloat(getComputedStyle(canvas).height);
-  let raf;
-  let last = performance.now();
+  let raf, last = performance.now();
+  let running = false;
+  let paused = false;
 
-  const MAX_FIELDS = 40;
-  let gravityFields = []; // {x,y,vx,vy,r,strength,life}
-  let particles = []; // moving balls
-  let baskets = []; // goals
-  let level = 1;
-  let goalCount = 8;
+  // player car
+  const player = {
+    x: 0, y: 0, w: 44, h: 88, laneX: 0, speed: 0, maxSpeed: 8, acc: 0.06, dec: 0.12,
+    color: '#ffcc33', shield: 0
+  };
+
+  // road configuration (3 lanes)
+  const lanes = 3;
+  let laneWidth;
+  let roadMargin = 40;
+
+  // obstacles and opponents
+  let obstacles = []; // {x,y,w,h,type,vy}
+  let pickups = []; // {x,y,r,type,vy}
+  let spawnTimer = 0;
+  let pickupTimer = 0;
+
+  // game stats
   let score = 0;
-  let timeLeft = 45; // seconds
-  let running = true;
-  let paintMode = true; // true: paint vectors, false: erase/strong mode
-  let showHint = false;
+  let best = parseInt(localStorage.getItem('mini_race_best') || '0', 10) || 0;
+  bestEl.textContent = best;
+  scoreEl.textContent = score;
+  speedEl.textContent = 0;
 
-  // utility
+  // settings
+  let tiltEnabled = false;
+  let soundOn = true;
+  let touchMode = ('ontouchstart' in window);
+  if(touchMode) touchControls.style.display = 'flex';
+
+  // simple sounds (WebAudio)
+  const audioCtx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
+  function playBeep(freq=330,duration=0.08,vol=0.06){
+    if(!audioCtx || !soundOn) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + duration);
+  }
+
+  // helpers
   function rand(a,b){ return a + Math.random()*(b-a); }
-  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-  function vecLen(x,y){return Math.hypot(x,y);}
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-  // initialize level
-  function setupLevel(l=1){
+  // initialize positions / reset
+  function resetGame(){
     W = canvas.clientWidth; H = parseFloat(getComputedStyle(canvas).height);
-    gravityFields = [];
-    particles = [];
-    baskets = [];
-    level = l;
-    levelEl.textContent = level;
-    goalCount = Math.min(12, 6 + level + Math.floor(level/2));
+    laneWidth = (W - roadMargin*2) / lanes;
+    player.x = W/2;
+    player.laneX = Math.floor(lanes/2);
+    player.x = roadMargin + laneWidth * player.laneX + laneWidth/2;
+    player.y = H - player.h - 16;
+    player.speed = 0.8;
+    player.shield = 0;
+    obstacles = [];
+    pickups = [];
+    spawnTimer = 0;
+    pickupTimer = 0;
     score = 0;
-    scoreEl.textContent = `${score} / ${goalCount}`;
-    // baskets: one moving basket on right
-    const bx = W - 80, by = rand(80, H-80);
-    baskets.push({x:bx, y:by, r:36, vx: (level%2?1.2: -1.2) * (1 + level*0.05)});
-    // spawn particles on left area
-    const spawnCount = goalCount + 3;
-    for(let i=0;i<spawnCount;i++){
-      particles.push({
-        x: rand(60, Math.min(160, W*0.35)),
-        y: rand(60, H-60),
-        vx: rand(0.2,1.0),
-        vy: rand(-0.5,0.5),
-        r: 7 + Math.random()*4,
-        life: 999,
-        taken: false,
-        color: `hsl(${Math.floor(rand(160,340))} 80% 60%)`
-      });
-    }
-    // time shorter as level increases
-    timeLeft = Math.max(18, 40 - level*3);
-    timeEl.textContent = `Tempo: ${Math.ceil(timeLeft)}s`;
+    scoreEl.textContent = score;
+    speedEl.textContent = Math.floor(player.speed*10);
+    overlay.style.display = 'flex';
+    menu.style.display = 'block';
+    resumeBtn.style.display = 'none';
+  }
+
+  // start / resume
+  function startGame(){
+    overlay.style.display = 'none';
+    menu.style.display = 'none';
+    running = true;
+    paused = false;
     last = performance.now();
-    drawOnce();
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    loop();
   }
 
-  // painting input
-  let painting = false;
-  let pStart = null;
-  let forceMultiplier = 1;
-  function pointerDown(e){
-    painting = true;
-    const p = getPointer(e);
-    pStart = p;
-    // detect long tap? for erase? but keep simple
+  function pauseGame(){
+    paused = true;
+    overlay.style.display = 'flex';
+    menu.style.display = 'block';
+    resumeBtn.style.display = 'inline-block';
   }
-  function pointerUp(e){
-    if(!painting) return;
-    painting = false;
-    const p = getPointer(e);
-    if(!pStart) return;
-    const dx = p.x - pStart.x;
-    const dy = p.y - pStart.y;
-    const dist = vecLen(dx,dy);
-    // short tap: small circular field away from pointer (nudge)
-    if(dist < 6){
-      addField(p.x, p.y, (Math.random()*2-1)*0.6, (Math.random()*2-1)*0.6, 36*forceMultiplier, 1.0 + level*0.03);
-    } else {
-      // line field: magnitude proportional to length
-      const mag = clamp(dist / 20, 0.4, 6) * forceMultiplier;
-      // add several small fields along the stroke for smoother influence
-      const steps = Math.min(8, Math.ceil(dist/24));
-      for(let i=0;i<=steps;i++){
-        const t = i/steps;
-        const x = pStart.x + dx * t;
-        const y = pStart.y + dy * t;
-        addField(x, y, dx/dist * mag, dy/dist * mag, 28 + (dist/10), 1.0 + level*0.02);
-      }
+
+  // spawning obstacles
+  function spawnObstacle(){
+    // types: car, cone, wall
+    const lane = Math.floor(rand(0, lanes));
+    const x = roadMargin + laneWidth*lane + laneWidth/2;
+    const typeRand = Math.random();
+    let type = 'car';
+    let w = laneWidth*0.6, h = 84, vy = 1.6 + score*0.02;
+    if(typeRand < 0.12){ type='wall'; w = laneWidth*0.9; h = 28; vy = 1.8 + score*0.03; }
+    else if(typeRand < 0.28){ type='cone'; w = laneWidth*0.45; h = 36; vy = 1.7 + score*0.02; }
+    const y = -h - 40;
+    obstacles.push({x,y,w,h,type,lane,vy});
+  }
+
+  function spawnPickup(){
+    const lane = Math.floor(rand(0, lanes));
+    const x = roadMargin + laneWidth*lane + laneWidth/2;
+    const typeRand = Math.random();
+    let type = 'boost';
+    if(typeRand < 0.45) type = 'boost';
+    else if(typeRand < 0.75) type = 'coin';
+    else type = 'shield';
+    pickups.push({x,y:-40,r:14,type,lane,vy:1.6 + score*0.02});
+  }
+
+  // input handling
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if(e.key === 'Escape') pauseGame();
+    if(e.key === 'p') { if(paused) startGame(); else pauseGame(); }
+  });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  // touch left/right
+  leftTouch.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['lefttouch']=true; }, {passive:false});
+  leftTouch.addEventListener('touchend', (e)=>{ e.preventDefault(); keys['lefttouch']=false; }, {passive:false});
+  rightTouch.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['righttouch']=true; }, {passive:false});
+  rightTouch.addEventListener('touchend', (e)=>{ e.preventDefault(); keys['righttouch']=false; }, {passive:false});
+
+  // device tilt support
+  let tiltX = 0;
+  window.addEventListener('deviceorientation', (ev)=>{
+    if(!tiltEnabled) return;
+    // gamma is left-right tilt in degrees [-90,90]
+    const g = ev.gamma || 0;
+    tiltX = clamp(g / 30, -1, 1);
+  });
+
+  // touch swipe to steer (alternative)
+  let touchStartX = null;
+  canvas.addEventListener('touchstart', (e)=>{
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+  }, {passive:true});
+  canvas.addEventListener('touchend', (e)=>{
+    if(touchStartX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    if(Math.abs(dx) > 30){
+      if(dx < 0) moveLeft(); else moveRight();
     }
-    pStart = null;
-  }
-  function pointerMove(e){
-    // optional: show preview but we keep it simple
-  }
-  canvas.addEventListener('mousedown', pointerDown);
-  window.addEventListener('mouseup', pointerUp);
-  canvas.addEventListener('mousemove', pointerMove);
-  canvas.addEventListener('touchstart', e => { pointerDown(e.touches[0]); }, {passive:true});
-  window.addEventListener('touchend', e => { pointerUp(e.changedTouches ? e.changedTouches[0] : e); }, {passive:true});
-  canvas.addEventListener('touchmove', e => { pointerMove(e.touches[0]); }, {passive:true});
+    touchStartX = null;
+  }, {passive:true});
 
-  // helper to read pointer coords relative to canvas
-  function getPointer(e){
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX !== undefined ? e.clientX : (e.pageX || 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.pageY || 0);
-    return { x: clamp(clientX - rect.left, 0, rect.width), y: clamp(clientY - rect.top, 0, rect.height) };
+  // steering functions
+  function moveLeft(){ player.laneX = clamp(player.laneX - 1, 0, lanes-1); playBeep(240,0.06,0.05); }
+  function moveRight(){ player.laneX = clamp(player.laneX + 1, 0, lanes-1); playBeep(480,0.06,0.05); }
+
+  // collision helper (circle vs rect or rect vs rect)
+  function rectsIntersect(a,b){
+    return !(a.x + a.w/2 < b.x - b.w/2 || a.x - a.w/2 > b.x + b.w/2 || a.y + a.h/2 < b.y - b.h/2 || a.y - a.h/2 > b.y + b.h/2);
   }
 
-  // add a gravity field
-  function addField(x,y,vx,vy,r,str){
-    gravityFields.push({x,y,vx,vy,r, strength: str, life: 12 + Math.random()*28});
-    if(gravityFields.length > MAX_FIELDS) gravityFields.shift();
-  }
-
-  // physics update
-  function update(dt){
-    // move baskets (simple back&forth)
-    for(const b of baskets){
-      b.x += b.vx * dt * 60;
-      if(b.x > W - 36) { b.x = W-36; b.vx *= -1; }
-      if(b.x < 36) { b.x = 36; b.vx *= -1; }
-    }
-
-    // decay fields life
-    for(const f of gravityFields) f.life -= dt*1.2;
-    gravityFields = gravityFields.filter(f => f.life > 0);
-
-    // update particles
-    for(const p of particles){
-      if(p.taken) continue;
-      // compute influence: sum nearby fields
-      let ax = 0, ay = 0;
-      for(const f of gravityFields){
-        const dx = f.x - p.x, dy = f.y - p.y;
-        const d2 = dx*dx + dy*dy;
-        const rr = f.r * f.r;
-        const w = 1 - Math.min(1, d2 / (rr + 1));
-        if(w <= 0) continue;
-        // apply vector scaled by weight and field strength
-        ax += (f.vx * f.strength) * w;
-        ay += (f.vy * f.strength) * w;
-      }
-      // ambient slight downward gravity
-      ay += 0.06 * (1 + level*0.02);
-      // integrate velocity
-      p.vx += ax * dt * 0.9;
-      p.vy += ay * dt * 0.9;
-      // limit speed
-      const sp = Math.hypot(p.vx, p.vy);
-      const maxSp = 6 + level*0.6;
-      if(sp > maxSp){
-        p.vx = p.vx / sp * maxSp;
-        p.vy = p.vy / sp * maxSp;
-      }
-      // integrate position
-      p.x += p.vx * dt * 60;
-      p.y += p.vy * dt * 60;
-      // bounce walls
-      if(p.x < p.r){ p.x = p.r; p.vx = Math.abs(p.vx)*0.4; }
-      if(p.x > W - p.r){ p.x = W - p.r; p.vx = -Math.abs(p.vx)*0.4; }
-      if(p.y < p.r){ p.y = p.r; p.vy = Math.abs(p.vy)*0.4; }
-      if(p.y > H - p.r){ p.y = H - p.r; p.vy = -Math.abs(p.vy)*0.4; }
-      // check basket collision
-      for(const b of baskets){
-        const dx = p.x - b.x, dy = p.y - b.y;
-        if(!p.taken && Math.hypot(dx,dy) < b.r - 6){
-          p.taken = true;
-          // animate collection: move to basket center slowly
-          score++;
-          scoreEl.textContent = `${score} / ${goalCount}`;
-          // small reward: spawn a sparkle field
-          addField(b.x + rand(-20,20), b.y + rand(-20,20), (Math.random()*2-1)*1.2, (Math.random()*2-1)*1.2, 24, 1.2);
-        }
-      }
-    }
-
-    // win/lose conditions
-    if(score >= goalCount){
-      // next level
-      level++;
-      setupLevel(level);
-    }
-
-    // decrease timer
-    timeLeft -= dt;
-    timeEl.textContent = `Tempo: ${Math.ceil(timeLeft)}s`;
-    if(timeLeft <= 0){
-      // game over: reset to level 1, but keep playability
-      timeEl.textContent = `Tempo esgotado! Reiniciando...`;
-      running = false;
-      setTimeout(()=>{ setupLevel(1); running = true; }, 1200);
-    }
-  }
-
-  // drawing
+  // draw loop
   function draw(){
     W = canvas.clientWidth; H = parseFloat(getComputedStyle(canvas).height);
-    // clear
-    ctx.fillStyle = '#02111a';
+    laneWidth = (W - roadMargin*2) / lanes;
+    // background road
+    ctx.fillStyle = '#041424';
     ctx.fillRect(0,0,W,H);
+    // side grass
+    ctx.fillStyle = '#031518';
+    ctx.fillRect(0,0,roadMargin,H);
+    ctx.fillRect(W-roadMargin,0,roadMargin,H);
 
-    // draw soft background grid
-    ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    for(let x=0;x<W;x+=48){
-      ctx.beginPath();
-      ctx.moveTo(x+0.5,0);
-      ctx.lineTo(x+0.5,H);
-      ctx.stroke();
+    // draw road stripes (perspective motion)
+    const stripeW = laneWidth*0.08;
+    for(let i=0;i<lanes-1;i++){
+      const stripeX = roadMargin + laneWidth*(i+1) - stripeW/2;
+      // dashed center stripe
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      for(let y=-200 + (frame* (player.speed*8) % 40); y<H+200; y+=40){
+        ctx.fillRect(stripeX + stripeW/2 - 2, y, 4, 22);
+      }
     }
-    for(let y=0;y<H;y+=48){
-      ctx.beginPath();
-      ctx.moveTo(0,y+0.5);
-      ctx.lineTo(W,y+0.5);
-      ctx.stroke();
-    }
-    ctx.restore();
 
-    // draw gravity fields (vectors)
-    for(const f of gravityFields){
-      const alpha = clamp(f.life/20, 0.08, 0.95);
-      const len = vecLen(f.vx, f.vy);
+    // draw road border
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(roadMargin, 8, W-roadMargin*2, H-16);
+
+    // draw pickups
+    for(const p of pickups){
+      const px = p.x, py = p.y;
       ctx.save();
-      ctx.translate(f.x, f.y);
-      ctx.globalAlpha = 0.6 * alpha;
-      // ripple circle
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(86,240,209,${0.06 * alpha})`;
-      ctx.arc(0,0,f.r * (0.6 + alpha*0.6), 0, Math.PI*2);
-      ctx.fill();
-      // vector arrow
-      const angle = Math.atan2(f.vy, f.vx);
-      const L = 8 + len*6;
-      ctx.rotate(angle);
-      // shaft
-      ctx.beginPath();
-      ctx.moveTo(-L*0.2,0);
-      ctx.lineTo(L,0);
-      ctx.strokeStyle = `rgba(86,240,209,${0.9*alpha})`;
-      ctx.lineWidth = 2.2;
-      ctx.stroke();
-      // head
-      ctx.beginPath();
-      ctx.moveTo(L,0);
-      ctx.lineTo(L-6,-5);
-      ctx.lineTo(L-6,5);
-      ctx.closePath();
-      ctx.fillStyle = `rgba(86,240,209,${0.95*alpha})`;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // draw baskets
-    for(const b of baskets){
-      ctx.save();
-      ctx.globalAlpha = 0.95;
-      ctx.beginPath();
-      // basket body
-      ctx.fillStyle = '#102835';
-      ctx.strokeStyle = '#79f3db';
-      ctx.lineWidth = 2;
-      ctx.arc(b.x, b.y, b.r, Math.PI, 0, false);
-      ctx.lineTo(b.x+b.r, b.y + 8);
-      ctx.lineTo(b.x-b.r, b.y + 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      // rim highlight
-      ctx.beginPath();
-      ctx.moveTo(b.x-b.r*0.6, b.y - 4);
-      ctx.lineTo(b.x+b.r*0.6, b.y - 4);
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      // label
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = '600 12px Inter, system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('Cesta', b.x, b.y + 6);
-      ctx.restore();
-    }
-
-    // draw particles
-    for(const p of particles){
-      ctx.save();
-      // shadow
-      ctx.beginPath();
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.ellipse(p.x+2, p.y+3, p.r*1.25, p.r*0.6, 0, 0, Math.PI*2);
-      ctx.fill();
-      // ball
-      ctx.beginPath();
-      ctx.fillStyle = p.color;
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-      ctx.fill();
-      // ring if taken
-      if(p.taken){
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 1;
-        ctx.arc(p.x, p.y, p.r+3, 0, Math.PI*2);
-        ctx.stroke();
+      if(p.type === 'boost'){
+        ctx.fillStyle = '#ffcc33';
+        ctx.beginPath(); ctx.ellipse(px,py,p.r*1.2,p.r,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.fillText('B', px-4, py+4);
+      } else if(p.type === 'coin'){
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.arc(px,py,p.r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.fillText('¢', px-5, py+5);
+      } else {
+        ctx.fillStyle = '#56e6c2';
+        ctx.beginPath(); ctx.moveTo(px,py-p.r); ctx.lineTo(px+p.r,py+p.r); ctx.lineTo(px-p.r,py+p.r); ctx.closePath(); ctx.fill();
       }
       ctx.restore();
     }
 
-    // hints (optional)
-    if(showHint){
+    // draw obstacles
+    for(const o of obstacles){
+      const ox = o.x, oy = o.y;
       ctx.save();
-      ctx.globalAlpha = 0.92;
-      ctx.fillStyle = 'rgba(3,6,9,0.6)';
-      ctx.fillRect(12,12,260,88);
-      ctx.fillStyle = 'white';
-      ctx.font = '600 13px Inter, system-ui';
-      ctx.fillText('Dica rápida:', 24,34);
-      ctx.font = '13px Inter, system-ui';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.fillText('- Pinte um vetor levemente para cima perto das bolinhas',24,56);
-      ctx.fillText('- Use linhas longas para criar canais; curtos para impulsos',24,74);
+      if(o.type === 'car'){
+        ctx.fillStyle = '#c24d4d';
+        ctx.fillRect(ox - o.w/2, oy - o.h/2, o.w, o.h);
+        // windows
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(ox - o.w/4, oy - o.h/4, o.w/2, o.h/4);
+      } else if(o.type === 'cone'){
+        ctx.fillStyle = '#ff7b2d';
+        ctx.beginPath(); ctx.moveTo(ox, oy - o.h/2); ctx.lineTo(ox + o.w/2, oy + o.h/2); ctx.lineTo(ox - o.w/2, oy + o.h/2); ctx.closePath(); ctx.fill();
+      } else {
+        ctx.fillStyle = '#444';
+        ctx.fillRect(ox - o.w/2, oy - o.h/2, o.w, o.h);
+      }
       ctx.restore();
     }
 
-    // small HUD overlays drawn on canvas
+    // draw player
+    // smooth lane x
+    const targetX = roadMargin + laneWidth*player.laneX + laneWidth/2;
+    player.x += (targetX - player.x) * 0.24;
     ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, H-34, W, 34);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(player.x, player.y + player.h*0.5, player.w*0.9, player.h*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+    // car body
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x - player.w/2, player.y - player.h/2, player.w, player.h);
+    // wheels
+    ctx.fillStyle = '#111';
+    ctx.fillRect(player.x - player.w/2 + 6, player.y + player.h/2 - 12, 12, 8);
+    ctx.fillRect(player.x + player.w/2 - 18, player.y + player.h/2 - 12, 12, 8);
+    // shield
+    if(player.shield > 0){
+      ctx.strokeStyle = 'rgba(86,230,194,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(player.x, player.y, player.w*0.9, player.h*0.9, 0, 0, Math.PI*2);
+      ctx.stroke();
+    }
     ctx.restore();
+
+    // HUD overlays drawn on canvas (distance lines)
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(0, H-12, W, 12);
+    ctx.restore();
+
   }
 
-  function drawOnce(){ draw(); }
+  // update physics & game
+  let frame = 0;
+  function update(dt){
+    frame++;
+    // controls: keyboard or tilt or touch
+    if((keys['arrowleft'] || keys['a'] || keys['left'] || keys['lefttouch'])) moveLeftIfAllowed();
+    if((keys['arrowright'] || keys['d'] || keys['right'] || keys['righttouch'])) moveRightIfAllowed();
+    if(tiltEnabled && Math.abs(tiltX) > 0.35){
+      if(tiltX < 0) moveLeftIfAllowed(); else moveRightIfAllowed();
+    }
+    // speed logic: ramp up slowly
+    player.speed += player.acc * dt * 60;
+    player.speed = clamp(player.speed, 0.8, player.maxSpeed + Math.min(5, score*0.02));
+    speedEl.textContent = Math.floor(player.speed*10);
+
+    // spawn obstacles progressively
+    spawnTimer -= dt * 60 * (0.6 + player.speed*0.08);
+    if(spawnTimer <= 0){
+      spawnObstacle();
+      spawnTimer = clamp(40 - score*0.6, 14, 40);
+    }
+    pickupTimer -= dt * 60;
+    if(pickupTimer <= 0){
+      spawnPickup();
+      pickupTimer = clamp(80 - score*0.6, 40, 120);
+    }
+
+    // move obstacles and pickups downward (towards player)
+    for(const o of obstacles){
+      o.y += o.vy * player.speed * dt * 60;
+    }
+    for(const p of pickups){
+      p.y += p.vy * player.speed * dt * 60;
+    }
+
+    // remove off-screen
+    obstacles = obstacles.filter(o => o.y < H + 200);
+    pickups = pickups.filter(p => p.y < H + 200);
+
+    // collisions
+    const playerRect = {x: player.x, y: player.y, w: player.w, h: player.h};
+    // obstacles
+    for(let i=0;i<obstacles.length;i++){
+      const o = obstacles[i];
+      const oRect = {x:o.x, y:o.y, w:o.w, h:o.h};
+      if(rectsIntersect(playerRect, oRect)){
+        if(player.shield > 0){
+          player.shield -= 1;
+          obstacles.splice(i,1);
+          playBeep(120,0.08,0.08);
+          score += 2;
+          continue;
+        }
+        // hit: slow down & lose score
+        player.speed = Math.max(0.6, player.speed - 2.4);
+        obstacles.splice(i,1);
+        score = Math.max(0, score - 3);
+        playBeep(120,0.12,0.18);
+      }
+    }
+    // pickups
+    for(let i=0;i<pickups.length;i++){
+      const p = pickups[i];
+      const pr = {x:p.x, y:p.y, w:p.r*2, h:p.r*2};
+      if(rectsIntersect(playerRect, pr)){
+        if(p.type === 'boost'){
+          player.speed = clamp(player.speed + 3.2, 0.8, player.maxSpeed + 8);
+          score += 5;
+          playBeep(800,0.06,0.08);
+        } else if(p.type === 'coin'){
+          score += 2;
+          playBeep(900,0.06,0.06);
+        } else if(p.type === 'shield'){
+          player.shield = Math.min(3, player.shield + 2);
+          playBeep(640,0.06,0.07);
+        }
+        pickups.splice(i,1);
+      }
+    }
+
+    // accumulate score over time depending on speed
+    score += Math.floor(player.speed * dt * 10);
+    scoreEl.textContent = Math.floor(score);
+
+    // update best
+    if(score > best){
+      best = Math.floor(score);
+      bestEl.textContent = best;
+      localStorage.setItem('mini_race_best', best);
+    }
+
+    // small auto difficulty: increase obstacle speed slightly over time
+    // game over condition: if speed too low for too long? We'll keep it endless - but add occasional heavy obstacle that can knock out
+  }
+
+  // lane move helpers with rate limiting
+  let lastMove = 0;
+  function moveLeftIfAllowed(){
+    const now = performance.now();
+    if(now - lastMove < 160) return;
+    lastMove = now;
+    moveLeft();
+  }
+  function moveRightIfAllowed(){
+    const now = performance.now();
+    if(now - lastMove < 160) return;
+    lastMove = now;
+    moveRight();
+  }
 
   // main loop
   function loop(now){
@@ -422,43 +486,58 @@
     now = now || performance.now();
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
-    if(running){
+    if(running && !paused){
       update(dt);
       draw();
     }
   }
 
-  // controls
-  resetBtn.addEventListener('click', ()=>{ setupLevel(1); });
-  hintBtn.addEventListener('click', ()=>{ showHint = !showHint; });
-  autoBtn.addEventListener('click', ()=>{ paintMode = !paintMode; autoBtn.textContent = paintMode ? 'Modo: Pintar' : 'Modo: Força'; autoBtn.classList.toggle('primary'); });
+  // UI bindings
+  startBtn.addEventListener('click', ()=>{ resetGame(); startGame(); });
+  resumeBtn.addEventListener('click', ()=>{ overlay.style.display='none'; menu.style.display='none'; paused=false; last=performance.now(); if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); });
+  resetBtn.addEventListener('click', ()=>{ resetGame(); });
 
-  // keyboard for force multiplier
-  window.addEventListener('keydown', (e)=>{ if(e.key === 'Shift') forceMultiplier = 1.8; if(e.key === 'Control') forceMultiplier = 2.4; });
-  window.addEventListener('keyup', (e)=>{ if(e.key === 'Shift' || e.key === 'Control') forceMultiplier = 1; });
-
-  // simple background spawn mechanic: every few seconds add a tiny random field to keep game lively
-  setInterval(()=>{
-    if(Math.random() < 0.6) addField(rand(60, W-60), rand(60,H-60), rand(-1,1), rand(-1,1), rand(10,34), 0.6 + Math.random()*0.9);
-  }, 900);
-
-  // initial setup and start
-  setupLevel(1);
-  running = true;
-  loop();
-
-  // small responsivity fix: recalc sizes on first interaction
-  window.addEventListener('orientationchange', ()=>{ fit(); setupLevel(level); });
-
-  // make canvas clickable: painting via clicks/taps
-  canvas.addEventListener('click', (e) => {
-    // short tap spawns a small nudging field
-    const p = getPointer(e);
-    addField(p.x, p.y, rand(-0.6,0.6), rand(-0.6,0.6), 28, 1.0 * forceMultiplier);
+  tiltBtn.addEventListener('click', ()=>{
+    tiltEnabled = !tiltEnabled;
+    tiltBtn.textContent = (tiltEnabled ? 'Tilt: ON' : 'Tilt: OFF');
+    if(tiltEnabled && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
 
-  // debug: show pointer preview while pressing (optional)
-  // (kept out to remain minimal)
+  soundBtn.addEventListener('click', ()=>{ soundOn = !soundOn; soundBtn.textContent = (soundOn ? 'Som: ON' : 'Som: OFF'); });
+
+  // keyboard steering
+  window.addEventListener('keydown', e => {
+    if(['arrowleft','a'].includes(e.key.toLowerCase())) moveLeftIfAllowed();
+    if(['arrowright','d'].includes(e.key.toLowerCase())) moveRightIfAllowed();
+  });
+
+  // mouse click to steer: left half -> left, right half -> right
+  canvas.addEventListener('click', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if(x < rect.width/2) moveLeftIfAllowed(); else moveRightIfAllowed();
+  });
+
+  // initial reset
+  resetGame();
+
+  // Mobile: resume audio on first touch if needed
+  document.body.addEventListener('touchstart', function onFirstTouch(){
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    document.body.removeEventListener('touchstart', onFirstTouch);
+  }, {passive:true});
+
+  // small demo obstacles spawn to make menu lively
+  // start the loop visually even when not running for menu preview
+  let previewLast = performance.now();
+  (function previewLoop(){
+    requestAnimationFrame(previewLoop);
+    const now = performance.now();
+    const dt = Math.min(0.033, (now - previewLast) / 1000);
+    previewLast = now;
+    // draw a static scene so menu isn't blank
+    draw();
+  })();
 
 })();
 </script>
