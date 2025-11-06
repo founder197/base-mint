@@ -3,270 +3,463 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Pong simples — Jogo em HTML/JS</title>
+<title>Gravity Painter — Jogo HTML5</title>
 <style>
-  :root{--bg:#0b0b0f;--fg:#e6e6e6;--accent:#2dd4bf}
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-  body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#05060a,var(--bg));color:var(--fg)}
-  #gameWrap{width:min(900px,95vw);max-width:900px;background:rgba(255,255,255,0.02);padding:12px;border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.6)}
-  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  h1{font-size:16px;margin:0;color:var(--fg)}
-  #score{font-weight:600;color:var(--accent)}
-  canvas{display:block;background:#020214;border-radius:8px;width:100%;height:60vh;max-height:640px}
-  .controls{display:flex;gap:8px;align-items:center;margin-top:8px;justify-content:space-between}
-  .btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:var(--fg);cursor:pointer}
-  .hint{opacity:0.7;font-size:13px}
-  @media (max-width:420px){
-    canvas{height:56vh}
-    h1{font-size:14px}
+  :root{
+    --bg:#0b1220; --panel:#0b1530; --accent:#56f0d1; --muted:#a8b3c7; --danger:#ff6b6b;
   }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:var(--muted)}
+  body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#051025,#071427);padding:12px}
+  .wrap{width:min(980px,98vw);max-width:980px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+  h1{font-size:18px;margin:0;color:white}
+  .controls{display:flex;gap:8px;align-items:center}
+  button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px 10px;border-radius:8px;cursor:pointer}
+  button.primary{border-color:var(--accent);color:var(--accent)}
+  #hud{display:flex;gap:10px;align-items:center;font-size:14px}
+  canvas{width:100%;height:64vh;max-height:720px;border-radius:10px;background:linear-gradient(180deg,#061122,#00121a);display:block}
+  .instr{font-size:13px;opacity:0.9;margin-top:8px}
+  .footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px}
+  .meter{font-weight:700;color:var(--accent)}
+  .small{font-size:13px;opacity:0.9}
+  @media (max-width:480px){ canvas{height:62vh} h1{font-size:16px} }
 </style>
 </head>
 <body>
-<div id="gameWrap">
-  <header>
-    <h1>Pong — HTML5</h1>
-    <div id="score">0 : 0</div>
-  </header>
+  <div class="wrap">
+    <header>
+      <h1>Gravity Painter</h1>
+      <div class="controls">
+        <div id="hud">
+          <span>Level <strong id="level">1</strong></span>
+          <span class="meter" id="score">0 / 8</span>
+          <span id="time">—</span>
+        </div>
+        <button id="reset">Reiniciar</button>
+        <button id="hint">Dica</button>
+        <button id="auto" class="primary">Modo: Pintar</button>
+      </div>
+    </header>
 
-  <canvas id="c"></canvas>
+    <canvas id="c"></canvas>
 
-  <div class="controls">
-    <div class="hint">Desktop: ↑ ↓ | Mobile: toque e arraste</div>
-    <div>
-      <button class="btn" id="startBtn">Iniciar / Reiniciar</button>
-      <button class="btn" id="aiToggle">AI: ON</button>
+    <div class="instr">
+      Toque/arraste para **pintar vetores de gravidade**. As bolinhas seguem a direção local. Pinte com diferentes forças segurando SHIFT (desktop) ou usando o botão "Modo" (mobile). Objetivo: levar as bolinhas para a cesta dentro do tempo.
+    </div>
+
+    <div class="footer">
+      <div class="small">Pinte: arraste para definir direção e intensidade. Clique curto cria um campo pequeno. Segure Ctrl/Shift para força.</div>
+      <div class="small">Feito por um assistente — jogo original, single-file.</div>
     </div>
   </div>
-</div>
 
 <script>
 (() => {
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha: false });
-  const scoreEl = document.getElementById('score');
-  const startBtn = document.getElementById('startBtn');
-  const aiToggle = document.getElementById('aiToggle');
 
-  let W, H, raf;
-  function resize() {
+  // HUD
+  const levelEl = document.getElementById('level');
+  const scoreEl = document.getElementById('score');
+  const timeEl = document.getElementById('time');
+  const resetBtn = document.getElementById('reset');
+  const hintBtn = document.getElementById('hint');
+  const autoBtn = document.getElementById('auto');
+
+  // sizing
+  function fit() {
     const ratio = devicePixelRatio || 1;
-    W = canvas.clientWidth;
-    H = canvas.clientHeight;
-    canvas.width = Math.floor(W * ratio);
-    canvas.height = Math.floor(H * ratio);
+    const w = canvas.clientWidth || canvas.parentElement.clientWidth;
+    const h = Math.min(window.innerHeight*0.64, 720);
+    canvas.style.height = h + 'px';
+    canvas.width = Math.floor(canvas.clientWidth * ratio);
+    canvas.height = Math.floor(h * ratio);
     ctx.setTransform(ratio,0,0,ratio,0,0);
   }
-  // initial size
-  resize();
-  window.addEventListener('resize', resize);
+  window.addEventListener('resize', fit);
+  fit();
 
-  // Game objects
-  const paddleW = 12;
-  const paddleH = 90;
-  const ballR = 8;
+  // game state
+  let W = canvas.clientWidth, H = parseFloat(getComputedStyle(canvas).height);
+  let raf;
+  let last = performance.now();
 
-  const state = {
-    left: { x: 20, y: 0, vy:0, score:0 },
-    right: { x: 0, y:0, vy:0, score:0 },
-    ball: { x:0, y:0, vx:0, vy:0 },
-    running: false,
-    aiOn: true,
-    speedMult: 1
-  };
+  const MAX_FIELDS = 40;
+  let gravityFields = []; // {x,y,vx,vy,r,strength,life}
+  let particles = []; // moving balls
+  let baskets = []; // goals
+  let level = 1;
+  let goalCount = 8;
+  let score = 0;
+  let timeLeft = 45; // seconds
+  let running = true;
+  let paintMode = true; // true: paint vectors, false: erase/strong mode
+  let showHint = false;
 
-  function resetPositions() {
-    state.left.y = (H - paddleH)/2;
-    state.right.x = W - 20 - paddleW;
-    state.right.y = (H - paddleH)/2;
-    state.ball.x = W/2;
-    state.ball.y = H/2;
-    const ang = (Math.random()*Math.PI/3) - Math.PI/6;
-    const dir = Math.random() < 0.5 ? -1 : 1;
-    state.ball.vx = dir * 6 * state.speedMult * (Math.random()*0.2 + 0.9);
-    state.ball.vy = 6 * Math.tan(ang) * state.speedMult;
+  // utility
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function vecLen(x,y){return Math.hypot(x,y);}
+
+  // initialize level
+  function setupLevel(l=1){
+    W = canvas.clientWidth; H = parseFloat(getComputedStyle(canvas).height);
+    gravityFields = [];
+    particles = [];
+    baskets = [];
+    level = l;
+    levelEl.textContent = level;
+    goalCount = Math.min(12, 6 + level + Math.floor(level/2));
+    score = 0;
+    scoreEl.textContent = `${score} / ${goalCount}`;
+    // baskets: one moving basket on right
+    const bx = W - 80, by = rand(80, H-80);
+    baskets.push({x:bx, y:by, r:36, vx: (level%2?1.2: -1.2) * (1 + level*0.05)});
+    // spawn particles on left area
+    const spawnCount = goalCount + 3;
+    for(let i=0;i<spawnCount;i++){
+      particles.push({
+        x: rand(60, Math.min(160, W*0.35)),
+        y: rand(60, H-60),
+        vx: rand(0.2,1.0),
+        vy: rand(-0.5,0.5),
+        r: 7 + Math.random()*4,
+        life: 999,
+        taken: false,
+        color: `hsl(${Math.floor(rand(160,340))} 80% 60%)`
+      });
+    }
+    // time shorter as level increases
+    timeLeft = Math.max(18, 40 - level*3);
+    timeEl.textContent = `Tempo: ${Math.ceil(timeLeft)}s`;
+    last = performance.now();
+    drawOnce();
   }
 
-  function startGame() {
-    state.left.score = 0;
-    state.right.score = 0;
-    state.running = true;
-    resetPositions();
-    cancelAnimationFrame(raf);
-    loop();
+  // painting input
+  let painting = false;
+  let pStart = null;
+  let forceMultiplier = 1;
+  function pointerDown(e){
+    painting = true;
+    const p = getPointer(e);
+    pStart = p;
+    // detect long tap? for erase? but keep simple
+  }
+  function pointerUp(e){
+    if(!painting) return;
+    painting = false;
+    const p = getPointer(e);
+    if(!pStart) return;
+    const dx = p.x - pStart.x;
+    const dy = p.y - pStart.y;
+    const dist = vecLen(dx,dy);
+    // short tap: small circular field away from pointer (nudge)
+    if(dist < 6){
+      addField(p.x, p.y, (Math.random()*2-1)*0.6, (Math.random()*2-1)*0.6, 36*forceMultiplier, 1.0 + level*0.03);
+    } else {
+      // line field: magnitude proportional to length
+      const mag = clamp(dist / 20, 0.4, 6) * forceMultiplier;
+      // add several small fields along the stroke for smoother influence
+      const steps = Math.min(8, Math.ceil(dist/24));
+      for(let i=0;i<=steps;i++){
+        const t = i/steps;
+        const x = pStart.x + dx * t;
+        const y = pStart.y + dy * t;
+        addField(x, y, dx/dist * mag, dy/dist * mag, 28 + (dist/10), 1.0 + level*0.02);
+      }
+    }
+    pStart = null;
+  }
+  function pointerMove(e){
+    // optional: show preview but we keep it simple
+  }
+  canvas.addEventListener('mousedown', pointerDown);
+  window.addEventListener('mouseup', pointerUp);
+  canvas.addEventListener('mousemove', pointerMove);
+  canvas.addEventListener('touchstart', e => { pointerDown(e.touches[0]); }, {passive:true});
+  window.addEventListener('touchend', e => { pointerUp(e.changedTouches ? e.changedTouches[0] : e); }, {passive:true});
+  canvas.addEventListener('touchmove', e => { pointerMove(e.touches[0]); }, {passive:true});
+
+  // helper to read pointer coords relative to canvas
+  function getPointer(e){
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX !== undefined ? e.clientX : (e.pageX || 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.pageY || 0);
+    return { x: clamp(clientX - rect.left, 0, rect.width), y: clamp(clientY - rect.top, 0, rect.height) };
   }
 
-  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  // add a gravity field
+  function addField(x,y,vx,vy,r,str){
+    gravityFields.push({x,y,vx,vy,r, strength: str, life: 12 + Math.random()*28});
+    if(gravityFields.length > MAX_FIELDS) gravityFields.shift();
+  }
 
-  function draw() {
-    // background
-    ctx.fillStyle = '#020214';
+  // physics update
+  function update(dt){
+    // move baskets (simple back&forth)
+    for(const b of baskets){
+      b.x += b.vx * dt * 60;
+      if(b.x > W - 36) { b.x = W-36; b.vx *= -1; }
+      if(b.x < 36) { b.x = 36; b.vx *= -1; }
+    }
+
+    // decay fields life
+    for(const f of gravityFields) f.life -= dt*1.2;
+    gravityFields = gravityFields.filter(f => f.life > 0);
+
+    // update particles
+    for(const p of particles){
+      if(p.taken) continue;
+      // compute influence: sum nearby fields
+      let ax = 0, ay = 0;
+      for(const f of gravityFields){
+        const dx = f.x - p.x, dy = f.y - p.y;
+        const d2 = dx*dx + dy*dy;
+        const rr = f.r * f.r;
+        const w = 1 - Math.min(1, d2 / (rr + 1));
+        if(w <= 0) continue;
+        // apply vector scaled by weight and field strength
+        ax += (f.vx * f.strength) * w;
+        ay += (f.vy * f.strength) * w;
+      }
+      // ambient slight downward gravity
+      ay += 0.06 * (1 + level*0.02);
+      // integrate velocity
+      p.vx += ax * dt * 0.9;
+      p.vy += ay * dt * 0.9;
+      // limit speed
+      const sp = Math.hypot(p.vx, p.vy);
+      const maxSp = 6 + level*0.6;
+      if(sp > maxSp){
+        p.vx = p.vx / sp * maxSp;
+        p.vy = p.vy / sp * maxSp;
+      }
+      // integrate position
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      // bounce walls
+      if(p.x < p.r){ p.x = p.r; p.vx = Math.abs(p.vx)*0.4; }
+      if(p.x > W - p.r){ p.x = W - p.r; p.vx = -Math.abs(p.vx)*0.4; }
+      if(p.y < p.r){ p.y = p.r; p.vy = Math.abs(p.vy)*0.4; }
+      if(p.y > H - p.r){ p.y = H - p.r; p.vy = -Math.abs(p.vy)*0.4; }
+      // check basket collision
+      for(const b of baskets){
+        const dx = p.x - b.x, dy = p.y - b.y;
+        if(!p.taken && Math.hypot(dx,dy) < b.r - 6){
+          p.taken = true;
+          // animate collection: move to basket center slowly
+          score++;
+          scoreEl.textContent = `${score} / ${goalCount}`;
+          // small reward: spawn a sparkle field
+          addField(b.x + rand(-20,20), b.y + rand(-20,20), (Math.random()*2-1)*1.2, (Math.random()*2-1)*1.2, 24, 1.2);
+        }
+      }
+    }
+
+    // win/lose conditions
+    if(score >= goalCount){
+      // next level
+      level++;
+      setupLevel(level);
+    }
+
+    // decrease timer
+    timeLeft -= dt;
+    timeEl.textContent = `Tempo: ${Math.ceil(timeLeft)}s`;
+    if(timeLeft <= 0){
+      // game over: reset to level 1, but keep playability
+      timeEl.textContent = `Tempo esgotado! Reiniciando...`;
+      running = false;
+      setTimeout(()=>{ setupLevel(1); running = true; }, 1200);
+    }
+  }
+
+  // drawing
+  function draw(){
+    W = canvas.clientWidth; H = parseFloat(getComputedStyle(canvas).height);
+    // clear
+    ctx.fillStyle = '#02111a';
     ctx.fillRect(0,0,W,H);
 
-    // middle dashed line
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([12,10]);
-    ctx.beginPath();
-    ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // draw soft background grid
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    for(let x=0;x<W;x+=48){
+      ctx.beginPath();
+      ctx.moveTo(x+0.5,0);
+      ctx.lineTo(x+0.5,H);
+      ctx.stroke();
+    }
+    for(let y=0;y<H;y+=48){
+      ctx.beginPath();
+      ctx.moveTo(0,y+0.5);
+      ctx.lineTo(W,y+0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
 
-    // paddles
-    ctx.fillStyle = '#e6e6e6';
-    roundRect(ctx, state.left.x, state.left.y, paddleW, paddleH, 6, true);
-    roundRect(ctx, state.right.x, state.right.y, paddleW, paddleH, 6, true);
-
-    // ball
-    ctx.beginPath();
-    ctx.fillStyle = '#2dd4bf';
-    ctx.arc(state.ball.x, state.ball.y, ballR, 0, Math.PI*2);
-    ctx.fill();
-
-    // scores
-    scoreEl.textContent = `${state.left.score} : ${state.right.score}`;
-  }
-
-  function roundRect(ctx,x,y,w,h,r,fill){
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-    if(fill) ctx.fill();
-  }
-
-  // Update physics
-  function update(dt) {
-    // move ball
-    state.ball.x += state.ball.vx * dt;
-    state.ball.y += state.ball.vy * dt;
-
-    // top/bottom collision
-    if(state.ball.y - ballR < 0){
-      state.ball.y = ballR;
-      state.ball.vy *= -1;
-    } else if(state.ball.y + ballR > H){
-      state.ball.y = H - ballR;
-      state.ball.vy *= -1;
+    // draw gravity fields (vectors)
+    for(const f of gravityFields){
+      const alpha = clamp(f.life/20, 0.08, 0.95);
+      const len = vecLen(f.vx, f.vy);
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.globalAlpha = 0.6 * alpha;
+      // ripple circle
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(86,240,209,${0.06 * alpha})`;
+      ctx.arc(0,0,f.r * (0.6 + alpha*0.6), 0, Math.PI*2);
+      ctx.fill();
+      // vector arrow
+      const angle = Math.atan2(f.vy, f.vx);
+      const L = 8 + len*6;
+      ctx.rotate(angle);
+      // shaft
+      ctx.beginPath();
+      ctx.moveTo(-L*0.2,0);
+      ctx.lineTo(L,0);
+      ctx.strokeStyle = `rgba(86,240,209,${0.9*alpha})`;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      // head
+      ctx.beginPath();
+      ctx.moveTo(L,0);
+      ctx.lineTo(L-6,-5);
+      ctx.lineTo(L-6,5);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(86,240,209,${0.95*alpha})`;
+      ctx.fill();
+      ctx.restore();
     }
 
-    // left paddle collision
-    if(state.ball.x - ballR < state.left.x + paddleW){
-      if(state.ball.y > state.left.y && state.ball.y < state.left.y + paddleH){
-        state.ball.x = state.left.x + paddleW + ballR;
-        state.ball.vx *= -1.03; // speed up a bit
-        // add spin based on where it hit
-        const rel = (state.ball.y - (state.left.y + paddleH/2)) / (paddleH/2);
-        state.ball.vy += rel * 4;
-      } else if(state.ball.x < 0){
-        // right scores
-        state.right.score++;
-        resetPositions();
+    // draw baskets
+    for(const b of baskets){
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      // basket body
+      ctx.fillStyle = '#102835';
+      ctx.strokeStyle = '#79f3db';
+      ctx.lineWidth = 2;
+      ctx.arc(b.x, b.y, b.r, Math.PI, 0, false);
+      ctx.lineTo(b.x+b.r, b.y + 8);
+      ctx.lineTo(b.x-b.r, b.y + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // rim highlight
+      ctx.beginPath();
+      ctx.moveTo(b.x-b.r*0.6, b.y - 4);
+      ctx.lineTo(b.x+b.r*0.6, b.y - 4);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      // label
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '600 12px Inter, system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('Cesta', b.x, b.y + 6);
+      ctx.restore();
+    }
+
+    // draw particles
+    for(const p of particles){
+      ctx.save();
+      // shadow
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.ellipse(p.x+2, p.y+3, p.r*1.25, p.r*0.6, 0, 0, Math.PI*2);
+      ctx.fill();
+      // ball
+      ctx.beginPath();
+      ctx.fillStyle = p.color;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+      // ring if taken
+      if(p.taken){
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1;
+        ctx.arc(p.x, p.y, p.r+3, 0, Math.PI*2);
+        ctx.stroke();
       }
+      ctx.restore();
     }
 
-    // right paddle collision
-    if(state.ball.x + ballR > state.right.x){
-      if(state.ball.y > state.right.y && state.ball.y < state.right.y + paddleH){
-        state.ball.x = state.right.x - ballR;
-        state.ball.vx *= -1.03;
-        const rel = (state.ball.y - (state.right.y + paddleH/2)) / (paddleH/2);
-        state.ball.vy += rel * 4;
-      } else if(state.ball.x > W){
-        // left scores
-        state.left.score++;
-        resetPositions();
-      }
+    // hints (optional)
+    if(showHint){
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = 'rgba(3,6,9,0.6)';
+      ctx.fillRect(12,12,260,88);
+      ctx.fillStyle = 'white';
+      ctx.font = '600 13px Inter, system-ui';
+      ctx.fillText('Dica rápida:', 24,34);
+      ctx.font = '13px Inter, system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('- Pinte um vetor levemente para cima perto das bolinhas',24,56);
+      ctx.fillText('- Use linhas longas para criar canais; curtos para impulsos',24,74);
+      ctx.restore();
     }
 
-    // simple AI for right paddle
-    if(state.aiOn){
-      const target = state.ball.y - paddleH/2;
-      const diff = target - state.right.y;
-      state.right.y += clamp(diff, -6*state.speedMult, 6*state.speedMult) * dt * 60;
-      state.right.y = clamp(state.right.y, 0, H - paddleH);
-    }
-
-    // ensure paddles stay inside
-    state.left.y = clamp(state.left.y, 0, H - paddleH);
-    state.right.y = clamp(state.right.y, 0, H - paddleH);
+    // small HUD overlays drawn on canvas
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, H-34, W, 34);
+    ctx.restore();
   }
+
+  function drawOnce(){ draw(); }
 
   // main loop
-  let last = performance.now();
   function loop(now){
     raf = requestAnimationFrame(loop);
     now = now || performance.now();
-    const dt = Math.min(1/30, (now - last)/1000);
+    const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
-    if(state.running){
+    if(running){
       update(dt);
       draw();
     }
   }
 
-  // input handlers
-  // keyboard: arrows move left paddle
-  window.addEventListener('keydown', e => {
-    if(e.key === 'ArrowUp') state.left.y -= 24;
-    if(e.key === 'ArrowDown') state.left.y += 24;
+  // controls
+  resetBtn.addEventListener('click', ()=>{ setupLevel(1); });
+  hintBtn.addEventListener('click', ()=>{ showHint = !showHint; });
+  autoBtn.addEventListener('click', ()=>{ paintMode = !paintMode; autoBtn.textContent = paintMode ? 'Modo: Pintar' : 'Modo: Força'; autoBtn.classList.toggle('primary'); });
+
+  // keyboard for force multiplier
+  window.addEventListener('keydown', (e)=>{ if(e.key === 'Shift') forceMultiplier = 1.8; if(e.key === 'Control') forceMultiplier = 2.4; });
+  window.addEventListener('keyup', (e)=>{ if(e.key === 'Shift' || e.key === 'Control') forceMultiplier = 1; });
+
+  // simple background spawn mechanic: every few seconds add a tiny random field to keep game lively
+  setInterval(()=>{
+    if(Math.random() < 0.6) addField(rand(60, W-60), rand(60,H-60), rand(-1,1), rand(-1,1), rand(10,34), 0.6 + Math.random()*0.9);
+  }, 900);
+
+  // initial setup and start
+  setupLevel(1);
+  running = true;
+  loop();
+
+  // small responsivity fix: recalc sizes on first interaction
+  window.addEventListener('orientationchange', ()=>{ fit(); setupLevel(level); });
+
+  // make canvas clickable: painting via clicks/taps
+  canvas.addEventListener('click', (e) => {
+    // short tap spawns a small nudging field
+    const p = getPointer(e);
+    addField(p.x, p.y, rand(-0.6,0.6), rand(-0.6,0.6), 28, 1.0 * forceMultiplier);
   });
 
-  // mouse / touch: drag on canvas to move left paddle
-  let dragging = false;
-  function pointerDown(e){
-    dragging = true;
-    moveToPointer(e);
-  }
-  function pointerUp(){ dragging = false; }
-  function moveToPointer(e){
-    const rect = canvas.getBoundingClientRect();
-    const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
-    const y = clientY - rect.top;
-    state.left.y = y - paddleH/2;
-  }
-  canvas.addEventListener('mousedown', pointerDown);
-  canvas.addEventListener('touchstart', pointerDown, {passive:true});
-  window.addEventListener('mouseup', pointerUp);
-  window.addEventListener('touchend', pointerUp);
-  window.addEventListener('mousemove', e => { if(dragging) moveToPointer(e); });
-  window.addEventListener('touchmove', e => { if(dragging) moveToPointer(e); }, {passive:true});
+  // debug: show pointer preview while pressing (optional)
+  // (kept out to remain minimal)
 
-  // start button
-  startBtn.addEventListener('click', () => {
-    state.running = true;
-    state.left.score = 0;
-    state.right.score = 0;
-    resetPositions();
-    cancelAnimationFrame(raf);
-    last = performance.now();
-    loop();
-  });
-
-  aiToggle.addEventListener('click', () => {
-    state.aiOn = !state.aiOn;
-    aiToggle.textContent = state.aiOn ? 'AI: ON' : 'AI: OFF';
-  });
-
-  // initial small setup
-  // set canvas CSS size based on wrap width
-  function setupCanvasSize(){
-    const wrap = document.getElementById('gameWrap');
-    const w = Math.min(900, Math.max(320, wrap.clientWidth - 24));
-    canvas.style.width = w + 'px';
-    canvas.style.height = Math.floor(w * 0.65) + 'px';
-    resize();
-    state.right.x = parseFloat(getComputedStyle(canvas).width) - 20 - paddleW;
-    resetPositions();
-    draw();
-  }
-  setupCanvasSize();
-  window.addEventListener('orientationchange', setupCanvasSize);
-  window.addEventListener('resize', setupCanvasSize);
 })();
 </script>
 </body>
