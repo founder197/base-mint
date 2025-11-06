@@ -1,109 +1,97 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
-  <title>NFT Marketplace</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pong simples — Jogo em HTML/JS</title>
+<style>
+  :root{--bg:#0b0b0f;--fg:#e6e6e6;--accent:#2dd4bf}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#05060a,var(--bg));color:var(--fg)}
+  #gameWrap{width:min(900px,95vw);max-width:900px;background:rgba(255,255,255,0.02);padding:12px;border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.6)}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  h1{font-size:16px;margin:0;color:var(--fg)}
+  #score{font-weight:600;color:var(--accent)}
+  canvas{display:block;background:#020214;border-radius:8px;width:100%;height:60vh;max-height:640px}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:8px;justify-content:space-between}
+  .btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:var(--fg);cursor:pointer}
+  .hint{opacity:0.7;font-size:13px}
+  @media (max-width:420px){
+    canvas{height:56vh}
+    h1{font-size:14px}
+  }
+</style>
 </head>
 <body>
-  <h2>NFT Marketplace</h2>
-  <button id="connect">Conectar Wallet</button>
-  <div id="account"></div>
+<div id="gameWrap">
+  <header>
+    <h1>Pong — HTML5</h1>
+    <div id="score">0 : 0</div>
+  </header>
 
-  <h3>Listar NFT</h3>
-  <input id="nftAddress" placeholder="Endereço do NFT (ERC721)"/>
-  <input id="tokenId" placeholder="Token ID"/>
-  <input id="price" placeholder="Preço em ETH"/>
-  <button id="list">Listar</button>
+  <canvas id="c"></canvas>
 
-  <h3>Market Items</h3>
-  <button id="refresh">Atualizar</button>
-  <ul id="items"></ul>
+  <div class="controls">
+    <div class="hint">Desktop: ↑ ↓ | Mobile: toque e arraste</div>
+    <div>
+      <button class="btn" id="startBtn">Iniciar / Reiniciar</button>
+      <button class="btn" id="aiToggle">AI: ON</button>
+    </div>
+  </div>
+</div>
 
-  <script>
-    const MARKETPLACE_ADDRESS = "0x__SEU_MARKETPLACE_ADDRESS__"; // substituir após deploy
-    const MARKETPLACE_ABI = [
-      "function listItem(address nftAddress,uint256 tokenId,uint256 price) external",
-      "function buyItem(uint256 itemId) external payable",
-      "function fetchMarketItems() view returns (tuple(uint256 itemId,address nftAddress,uint256 tokenId,address seller,uint256 price,bool sold)[])",
-      "function cancelListing(uint256 itemId) external"
-    ];
-    const ERC721_ABI = [
-      "function approve(address to, uint256 tokenId) external",
-      "function ownerOf(uint256 tokenId) view returns (address)"
-    ];
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const scoreEl = document.getElementById('score');
+  const startBtn = document.getElementById('startBtn');
+  const aiToggle = document.getElementById('aiToggle');
 
-    let provider, signer, signerAddress;
-    const connectBtn = document.getElementById('connect');
-    const accountDiv = document.getElementById('account');
+  let W, H, raf;
+  function resize() {
+    const ratio = devicePixelRatio || 1;
+    W = canvas.clientWidth;
+    H = canvas.clientHeight;
+    canvas.width = Math.floor(W * ratio);
+    canvas.height = Math.floor(H * ratio);
+    ctx.setTransform(ratio,0,0,ratio,0,0);
+  }
+  // initial size
+  resize();
+  window.addEventListener('resize', resize);
 
-    async function connect() {
-      if (!window.ethereum) return alert("Instale MetaMask");
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      provider = new ethers.providers.Web3Provider(window.ethereum);
-      signer = provider.getSigner();
-      signerAddress = await signer.getAddress();
-      accountDiv.innerText = "Conta: " + signerAddress;
-    }
-    connectBtn.onclick = connect;
+  // Game objects
+  const paddleW = 12;
+  const paddleH = 90;
+  const ballR = 8;
 
-    async function listNFT() {
-      const nftAddress = document.getElementById('nftAddress').value;
-      const tokenId = document.getElementById('tokenId').value;
-      const priceEth = document.getElementById('price').value;
-      if (!nftAddress || !tokenId || !priceEth) return alert("Preencha campos");
+  const state = {
+    left: { x: 20, y: 0, vy:0, score:0 },
+    right: { x: 0, y:0, vy:0, score:0 },
+    ball: { x:0, y:0, vx:0, vy:0 },
+    running: false,
+    aiOn: true,
+    speedMult: 1
+  };
 
-      const nftContract = new ethers.Contract(nftAddress, ERC721_ABI, signer);
-      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
+  function resetPositions() {
+    state.left.y = (H - paddleH)/2;
+    state.right.x = W - 20 - paddleW;
+    state.right.y = (H - paddleH)/2;
+    state.ball.x = W/2;
+    state.ball.y = H/2;
+    const ang = (Math.random()*Math.PI/3) - Math.PI/6;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    state.ball.vx = dir * 6 * state.speedMult * (Math.random()*0.2 + 0.9);
+    state.ball.vy = 6 * Math.tan(ang) * state.speedMult;
+  }
 
-      // approve marketplace to transfer token
-      const approveTx = await nftContract.approve(MARKETPLACE_ADDRESS, tokenId);
-      await approveTx.wait();
-
-      const priceWei = ethers.utils.parseEther(priceEth);
-      const tx = await marketplace.listItem(nftAddress, tokenId, priceWei);
-      await tx.wait();
-      alert("NFT listado");
-    }
-    document.getElementById('list').onclick = listNFT;
-
-    async function loadItems() {
-      if (!provider) {
-        document.getElementById('items').innerHTML = "<li>Conecte wallet</li>";
-        return;
-      }
-      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, provider);
-      const items = await marketplace.fetchMarketItems();
-      const list = document.getElementById('items');
-      list.innerHTML = "";
-      for (const it of items) {
-        const li = document.createElement('li');
-        const priceEth = ethers.utils.formatEther(it.price.toString());
-        li.innerHTML = `Item ${it.itemId} - NFT: ${it.nftAddress} #${it.tokenId} - Seller: ${it.seller} - Price: ${priceEth} ETH
-          <button data-id="${it.itemId}" class="buy">Comprar</button>`;
-        list.appendChild(li);
-      }
-      document.querySelectorAll('.buy').forEach(btn => {
-        btn.onclick = async (e) => {
-          const id = e.target.getAttribute('data-id');
-          await buyItem(id);
-        };
-      });
-    }
-    document.getElementById('refresh').onclick = loadItems;
-
-    async function buyItem(itemId) {
-      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
-      // fetch to know price
-      const items = await marketplace.fetchMarketItems();
-      const item = items.find(i => i.itemId.toString() === itemId.toString());
-      if (!item) return alert("Item não encontrado");
-      const price = item.price.toString();
-      const tx = await marketplace.buyItem(itemId, { value: price });
-      await tx.wait();
-      alert("Compra concluída");
-      loadItems();
-    }
-  </script>
-</body>
-</html>
+  function startGame() {
+    state.left.score = 0;
+    state.right.score = 0;
+    state.running = true;
+    resetPositions();
+    cancelAnimationFrame(raf);
+    loop();
