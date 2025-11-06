@@ -1,93 +1,94 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Upload e Mint NFT (Base)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mint NFT EVM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.min.js"></script>
+  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <script src="https://unpkg.com/web3modal"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f5f6fa;
-      height: 100vh;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 12px;
-    }
-    h2 { margin-bottom: 6px; }
-    input[type=file] {
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 6px;
-      background: #fff;
-    }
-    button {
-      background: #0052ff;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    #status {
-      margin-top: 10px;
-      max-width: 90%;
-      word-break: break-all;
+      background: linear-gradient(135deg, #3b82f6, #9333ea);
+      font-family: 'Inter', sans-serif;
     }
   </style>
 </head>
-<body>
-  <h2>Upload e Mint NFT (Base)</h2>
-  <input type="file" id="fileInput" accept="image/*" />
-  <button id="uploadBtn">Upload & Mint</button>
-  <p id="status"></p>
+<body class="text-white min-h-screen flex flex-col items-center justify-center">
+
+  <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 w-11/12 sm:w-96 text-center shadow-xl">
+    <h1 class="text-2xl font-bold mb-4">✨ Mint NFT Multi-Rede</h1>
+
+    <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+      Conectar Carteira
+    </button>
+
+    <div id="walletInfo" class="mt-3 text-sm opacity-80"></div>
+
+    <input type="file" id="fileInput" accept="image/*" class="mt-6 block w-full text-sm text-gray-300
+      file:mr-4 file:py-2 file:px-4
+      file:rounded-full file:border-0
+      file:text-sm file:font-semibold
+      file:bg-violet-50 file:text-violet-700
+      hover:file:bg-violet-100
+    " />
+
+    <button id="mintBtn" class="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50">
+      Mint NFT
+    </button>
+
+    <p id="status" class="mt-4 text-sm opacity-90"></p>
+  </div>
 
   <script>
-    // Este texto será trocado pela Vercel na hora do deploy
-    const NFT_STORAGE_KEY = "NFT_STORAGE_KEY_PLACEHOLDER";
+    let provider, signer, userAddress;
 
-    const uploadBtn = document.getElementById('uploadBtn');
-    const statusEl = document.getElementById('status');
-
-    uploadBtn.addEventListener('click', async () => {
-      const file = document.getElementById('fileInput').files[0];
-      if (!file) {
-        alert("Selecione uma imagem primeiro!");
-        return;
+    // Inicializa Web3Modal
+    const web3Modal = new window.Web3Modal.default({
+      cacheProvider: false,
+      providerOptions: {
+        walletconnect: {
+          package: window.WalletConnectProvider.default,
+          options: {
+            infuraId: "YOUR_INFURA_ID" // opcional, apenas para redes EVM públicas
+          }
+        }
       }
+    });
 
-      statusEl.textContent = "Fazendo upload no IPFS...";
-
-      const formData = new FormData();
-      formData.append('file', file);
-
+    // Conectar carteira
+    document.getElementById("connectBtn").addEventListener("click", async () => {
       try {
-        const res = await fetch("https://api.nft.storage/upload", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${NFT_STORAGE_KEY}`,
-          },
-          body: formData,
-        });
+        const instance = await web3Modal.connect();
+        provider = new ethers.BrowserProvider(instance);
+        signer = await provider.getSigner();
+        userAddress = await signer.getAddress();
 
-        const data = await res.json();
-        if (!data.ok) throw new Error("Falha no upload");
-
-        const cid = data.value.cid;
-        const ipfsUrl = `https://ipfs.io/ipfs/${cid}`;
-        statusEl.innerHTML = `
-          ✅ Upload feito com sucesso!<br>
-          CID: ${cid}<br>
-          <a href="${ipfsUrl}" target="_blank">Ver imagem no IPFS</a>
-        `;
+        const network = await provider.getNetwork();
+        document.getElementById("walletInfo").innerHTML =
+          `🟢 ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}<br>🌐 ${network.name}`;
       } catch (err) {
         console.error(err);
-        statusEl.textContent = "Erro: " + err.message;
       }
+    });
+
+    // Função de Mint (exemplo genérico — apenas simulação por enquanto)
+    document.getElementById("mintBtn").addEventListener("click", async () => {
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Selecione uma imagem primeiro!");
+      if (!signer) return alert("Conecte sua carteira primeiro!");
+
+      document.getElementById("status").textContent = "🚀 Enviando e mintando NFT...";
+
+      // Aqui você pode integrar com NFT.Storage, Pinata, etc.
+      await new Promise(r => setTimeout(r, 2000)); // Simulação
+
+      document.getElementById("status").innerHTML = `
+        ✅ NFT criado com sucesso!<br>
+        (Simulação)<br>
+        <span class="text-xs">Em breve: integração com IPFS e contrato real.</span>
+      `;
     });
   </script>
 </body>
