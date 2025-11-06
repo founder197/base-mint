@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mint NFT EVM</title>
+  <title>Mint NFT Multi-Rede</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.min.js"></script>
   <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <script src="https://unpkg.com/web3modal"></script>
   <style>
     body {
-      background: linear-gradient(135deg, #3b82f6, #9333ea);
+      background: linear-gradient(135deg, #6366f1, #9333ea);
       font-family: 'Inter', sans-serif;
     }
   </style>
@@ -21,7 +21,7 @@
     <h1 class="text-2xl font-bold mb-4">✨ Mint NFT Multi-Rede</h1>
 
     <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
-      Conectar Carteira
+      🔌 Conectar Carteira
     </button>
 
     <div id="walletInfo" class="mt-3 text-sm opacity-80"></div>
@@ -44,32 +44,39 @@
   <script>
     let provider, signer, userAddress;
 
-    // Inicializa Web3Modal com suporte universal
-    const web3Modal = new window.Web3Modal.default({
-      cacheProvider: false,
-      providerOptions: {
-        walletconnect: {
-          package: window.WalletConnectProvider.default,
-          options: {
-            rpc: {
-              1: "https://rpc.ankr.com/eth",       // Ethereum
-              8453: "https://mainnet.base.org",     // Base
-              137: "https://polygon-rpc.com",       // Polygon
-              56: "https://bsc-dataseed.binance.org" // BSC
-            }
+    // Opções universais de carteira
+    const providerOptions = {
+      walletconnect: {
+        package: window.WalletConnectProvider.default,
+        options: {
+          rpc: {
+            1: "https://rpc.ankr.com/eth",
+            8453: "https://mainnet.base.org",
+            137: "https://polygon-rpc.com",
+            56: "https://bsc-dataseed.binance.org"
           }
         }
       }
+    };
+
+    const web3Modal = new window.Web3Modal.default({
+      cacheProvider: false,
+      providerOptions
     });
 
-    // Detectar e conectar automaticamente ao Ethereum injetado (MetaMask, Brave, Coinbase etc.)
     async function connectWallet() {
+      const status = document.getElementById("status");
+      status.textContent = "🔍 Procurando carteiras...";
+
       try {
         let instance;
+
         if (window.ethereum) {
+          status.textContent = "🦊 Detectado MetaMask / Carteira injetada...";
           instance = window.ethereum;
           await instance.request({ method: 'eth_requestAccounts' });
         } else {
+          status.textContent = "📱 Nenhuma carteira injetada — abrindo WalletConnect...";
           instance = await web3Modal.connect();
         }
 
@@ -79,10 +86,15 @@
         const network = await provider.getNetwork();
 
         document.getElementById("walletInfo").innerHTML =
-          `🟢 ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}<br>🌐 ${network.name}`;
+          `✅ Conectado: <b>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</b><br>🌐 Rede: ${network.name}`;
+        status.textContent = "";
       } catch (err) {
-        console.error(err);
-        alert("❌ Erro ao conectar carteira");
+        console.warn("Erro ao conectar:", err);
+        if (err.message.includes("User closed modal")) {
+          status.textContent = "❌ Conexão cancelada pelo usuário.";
+        } else {
+          status.textContent = "⚠️ Nenhuma carteira detectada. Use navegador com Web3 (MetaMask, Coinbase, Trust, Brave).";
+        }
       }
     }
 
@@ -96,12 +108,12 @@
 
       document.getElementById("status").textContent = "🚀 Enviando e mintando NFT...";
 
-      // Simulação (colocaremos IPFS e contrato real depois)
+      // Simulação do mint (em breve adicionaremos NFT real)
       await new Promise(r => setTimeout(r, 2000));
 
       document.getElementById("status").innerHTML = `
         ✅ NFT criado com sucesso!<br>
-        <span class="text-xs">(Simulação — pronto pra integração com IPFS e Base Mainnet)</span>
+        <span class="text-xs">(Simulação — pronto pra integração com Base Mainnet e IPFS)</span>
       `;
     });
   </script>
