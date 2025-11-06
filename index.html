@@ -1,97 +1,205 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mint NFT Multi-Rede</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.min.js"></script>
-  <style>
-    body {
-      background: linear-gradient(135deg, #6366f1, #9333ea);
-      font-family: 'Inter', sans-serif;
-    }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mint Real — Single File</title>
+
+<!-- tailwind (visual rápido) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- ethers v6 -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.min.js"></script>
+
+<style>
+  body{height:100%;background:linear-gradient(135deg,#0f172a,#6d28d9);color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  .card{max-width:720px;margin:40px auto;padding:24px;background:rgba(255,255,255,0.05);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.4)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Roboto Mono,monospace}
+  a.small{font-size:13px;color:#c7b3ff}
+</style>
 </head>
-<body class="text-white min-h-screen flex flex-col items-center justify-center">
+<body>
+  <div class="card">
+    <h1 class="text-2xl font-bold">Mint Real (Single File)</h1>
+    <p class="text-sm mt-1 opacity-90">Conecte carteira → envie imagem → mint no contrato ERC-721 (função <span class="mono">mintNFT(string)</span>).</p>
 
-  <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 w-11/12 sm:w-96 text-center shadow-xl">
-    <h1 class="text-2xl font-bold mb-4">✨ Mint NFT Multi-Rede</h1>
+    <!-- conexão -->
+    <div class="mt-4">
+      <button id="btnConnect" class="px-4 py-2 bg-blue-600 rounded-lg font-semibold">🔌 Conectar Carteira</button>
+      <div id="wallet" class="mt-2 text-sm mono"></div>
+    </div>
 
-    <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
-      🔌 Conectar Carteira
-    </button>
+    <!-- contrato -->
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div>
+        <label class="block text-xs opacity-80">Endereço do contrato (ERC-721)</label>
+        <input id="contractAddress" class="w-full mt-1 p-2 rounded bg-white/5 mono" placeholder="0x.. (se vazio, será necessário inserir)" />
+      </div>
+      <div>
+        <label class="block text-xs opacity-80">Nome do token (opcional)</label>
+        <input id="tokenName" class="w-full mt-1 p-2 rounded bg-white/5" placeholder="Ex: MeuNFT" />
+      </div>
+    </div>
 
-    <div id="walletInfo" class="mt-3 text-sm opacity-80"></div>
+    <!-- upload -->
+    <div class="mt-4">
+      <label class="block text-sm mb-1">Escolha uma imagem</label>
+      <input id="fileInput" type="file" accept="image/*" class="w-full p-2 rounded bg-white/5"/>
+    </div>
 
-    <input type="file" id="fileInput" accept="image/*" class="mt-6 block w-full text-sm text-gray-300
-      file:mr-4 file:py-2 file:px-4
-      file:rounded-full file:border-0
-      file:text-sm file:font-semibold
-      file:bg-violet-50 file:text-violet-700
-      hover:file:bg-violet-100
-    " />
+    <!-- botões -->
+    <div class="mt-4 flex gap-2">
+      <button id="btnPrepare" class="flex-1 px-4 py-2 bg-emerald-600 rounded-lg">📤 Preparar metadata</button>
+      <button id="btnMint" class="flex-1 px-4 py-2 bg-purple-600 rounded-lg">🪄 Mint (on-chain)</button>
+    </div>
 
-    <button id="mintBtn" class="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50">
-      Mint NFT
-    </button>
+    <div id="status" class="mt-4 text-sm"></div>
+    <div id="result" class="mt-3 text-sm"></div>
 
-    <p id="status" class="mt-4 text-sm opacity-90"></p>
+    <p class="mt-4 text-xs opacity-80">Obs: tokenURI será um <span class="mono">data:application/json;base64,</span> com a imagem embutida (base64). Não há upload externo.</p>
   </div>
 
-  <script>
-    let provider, signer, userAddress;
+<script>
+(async ()=> {
+  // ---------- Configuração ----------
+  // ABI mínima esperada:
+  const ERC721_MIN_ABI = [
+    // função que usaremos: mintNFT(string memory tokenURI)
+    "function mintNFT(string memory tokenURI) public"
+  ];
 
-    async function connectWallet() {
-      const status = document.getElementById("status");
-      status.textContent = "🔍 Procurando carteiras...";
+  // ---------- Estado ----------
+  let provider = null;
+  let signer = null;
+  let address = null;
+  let prepared = null; // { tokenURI, metadata, imageName }
 
-      try {
-        if (typeof window.ethereum === "undefined") {
-          status.textContent = "⚠️ Nenhuma carteira detectada. Abra em MetaMask, Brave, Coinbase ou Trust.";
-          return;
-        }
+  // ---------- helpers ----------
+  const $ = id => document.getElementById(id);
+  const setStatus = (html) => { $('status').innerHTML = html; console.log(html); }
+  const setResult = (html) => { $('result').innerHTML = html; console.log(html); }
 
-        // Solicitar conexão de contas
-        await window.ethereum.request({ method: "eth_requestAccounts" });
-
-        // Criar provider e signer
-        provider = new ethers.BrowserProvider(window.ethereum);
-        signer = await provider.getSigner();
-        userAddress = await signer.getAddress();
-
-        const network = await provider.getNetwork();
-
-        document.getElementById("walletInfo").innerHTML =
-          `✅ <b>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</b><br>🌐 Rede: ${network.name}`;
-        status.textContent = "";
-      } catch (err) {
-        console.error("Erro ao conectar:", err);
-        if (err.code === 4001) {
-          status.textContent = "❌ Conexão rejeitada pelo usuário.";
-        } else {
-          status.textContent = "⚠️ Erro ao inicializar carteira Web3.";
-        }
+  // ---------- conectar carteira (injetada) ----------
+  async function connectWallet(){
+    try{
+      setStatus('🔍 Iniciando conexão com carteira...');
+      if(!window.ethereum) {
+        setStatus('⚠️ Nenhuma carteira injetada (abra este link no navegador de sua carteira, ex: MetaMask mobile, Coinbase, Trust etc.).');
+        return;
       }
+      // pede permissão
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      address = await signer.getAddress();
+      const net = await provider.getNetwork();
+      $('wallet').innerHTML = `🔐 ${address.slice(0,6)}...${address.slice(-4)} • ${net.name}`;
+      setStatus('✅ Carteira conectada.');
+    } catch(e){
+      console.error(e);
+      if(e.code === 4001) setStatus('❌ Conexão rejeitada pelo usuário.');
+      else setStatus('❌ Erro ao conectar carteira.');
     }
+  }
+  $('btnConnect').addEventListener('click', connectWallet);
 
-    document.getElementById("connectBtn").addEventListener("click", connectWallet);
-
-    // Simulação de Mint NFT
-    document.getElementById("mintBtn").addEventListener("click", async () => {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Selecione uma imagem primeiro!");
-      if (!signer) return alert("Conecte sua carteira primeiro!");
-
-      document.getElementById("status").textContent = "🚀 Enviando e mintando NFT...";
-
-      await new Promise(r => setTimeout(r, 2000));
-
-      document.getElementById("status").innerHTML = `
-        ✅ NFT criado com sucesso!<br>
-        <span class="text-xs">(Simulação — pronto pra integrar com IPFS e Base Mainnet)</span>
-      `;
+  // ---------- ler arquivo e gerar data-uri base64  ----------
+  function fileToBase64(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result; // data:<type>;base64,...
+        resolve(dataUrl);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-  </script>
+  }
+
+  // ---------- preparar metadata (gera data:application/json;base64,...) ----------
+  $('btnPrepare').addEventListener('click', async ()=>{
+    try{
+      const file = $('fileInput').files[0];
+      if(!file) { alert('Escolha uma imagem primeiro'); return; }
+      setStatus('⏳ Lendo arquivo e gerando metadata (local)...');
+      const imgDataUrl = await fileToBase64(file); // ex: data:image/png;base64,AAA...
+      // metadata simples
+      const name = $('tokenName').value || file.name || 'My NFT';
+      const metadata = {
+        name,
+        description: `Minted by single-file UI — ${name}`,
+        image: imgDataUrl,
+        created_at: new Date().toISOString()
+      };
+      const metaJson = JSON.stringify(metadata);
+      const b64 = btoa(unescape(encodeURIComponent(metaJson))); // base64
+      const tokenURI = `data:application/json;base64,${b64}`;
+      prepared = { tokenURI, metadata, imageName: file.name };
+      setStatus('✅ Metadata preparado (local). Pronto para mint.');
+      setResult(`<div>🔎 Preview metadata:<pre style="white-space:pre-wrap;background:rgba(255,255,255,0.02);padding:8px;border-radius:6px">${JSON.stringify(metadata,null,2)}</pre></div>`);
+    }catch(err){
+      console.error(err);
+      setStatus('❌ Erro ao preparar metadata: ' + (err.message||err));
+    }
+  });
+
+  // ---------- mint on-chain ----------
+  $('btnMint').addEventListener('click', async ()=>{
+    try{
+      if(!prepared) {
+        const ok = confirm('Metadata não preparado. Deseja preparar automaticamente agora?');
+        if(ok) { $('btnPrepare').click(); await new Promise(r=>setTimeout(r,600)); } else return;
+      }
+      if(!prepared) { setStatus('❌ Não foi possível preparar metadata.'); return; }
+      // ensure connected
+      if(!signer) {
+        const doConnect = confirm('Carteira não conectada. Deseja conectar agora?');
+        if(!doConnect) return;
+        await connectWallet();
+        if(!signer) return;
+      }
+
+      // get contract address input
+      const contractAddress = ($('contractAddress').value || '').trim();
+      if(!contractAddress) {
+        alert('Insira o endereço do contrato ERC-721 com função public mintNFT(string).');
+        return;
+      }
+
+      setStatus('🔐 Preparando transação de mint — confirme na sua carteira.');
+      // create contract and call
+      const contract = new ethers.Contract(contractAddress, ERC721_MIN_ABI, signer);
+      // call mintNFT(tokenURI)
+      const tx = await contract.mintNFT(prepared.tokenURI);
+      setStatus(`⏳ Transação enviada: ${tx.hash}. Aguardando confirmação...`);
+      setResult(`<div>🔗 Tx enviada: <a class="small" target="_blank" href="#">${tx.hash}</a></div>`);
+      await tx.wait();
+      setStatus(`✅ Mint concluído! Tx: ${tx.hash}`);
+      // optional: show etherscan link for common networks
+      try {
+        const net = await provider.getNetwork();
+        let explorer = null;
+        if(net.chainId === 1) explorer = `https://etherscan.io/tx/${tx.hash}`;
+        else if(net.chainId === 8453) explorer = `https://basescan.org/tx/${tx.hash}`;
+        else if(net.chainId === 137) explorer = `https://polygonscan.com/tx/${tx.hash}`;
+        else if(net.chainId === 56) explorer = `https://bscscan.com/tx/${tx.hash}`;
+        if(explorer) setResult(`<div>🔗 Tx confirmada: <a class="small" target="_blank" href="${explorer}">${explorer}</a></div>`);
+      } catch(e){ console.warn(e); }
+    }catch(err){
+      console.error(err);
+      setStatus('❌ Erro durante o mint: ' + (err.message||err));
+    }
+  });
+
+  // quick hint if mobile in-wallet
+  if(window.ethereum && window.ethereum.isMetaMask) {
+    // nothing
+  } else if(window.ethereum) {
+    // other injected
+  } else {
+    // no injected - we still allow the user to paste a contract and use WalletConnect later (not included)
+  }
+
+})();
+</script>
 </body>
 </html>
