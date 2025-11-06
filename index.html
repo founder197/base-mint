@@ -6,8 +6,6 @@
   <title>Mint NFT Multi-Rede</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.min.js"></script>
-  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-  <script src="https://unpkg.com/web3modal"></script>
   <style>
     body {
       background: linear-gradient(135deg, #6366f1, #9333ea);
@@ -44,63 +42,42 @@
   <script>
     let provider, signer, userAddress;
 
-    // Opções universais de carteira
-    const providerOptions = {
-      walletconnect: {
-        package: window.WalletConnectProvider.default,
-        options: {
-          rpc: {
-            1: "https://rpc.ankr.com/eth",
-            8453: "https://mainnet.base.org",
-            137: "https://polygon-rpc.com",
-            56: "https://bsc-dataseed.binance.org"
-          }
-        }
-      }
-    };
-
-    const web3Modal = new window.Web3Modal.default({
-      cacheProvider: false,
-      providerOptions
-    });
-
     async function connectWallet() {
       const status = document.getElementById("status");
       status.textContent = "🔍 Procurando carteiras...";
 
       try {
-        let instance;
-
-        if (window.ethereum) {
-          status.textContent = "🦊 Detectado MetaMask / Carteira injetada...";
-          instance = window.ethereum;
-          await instance.request({ method: 'eth_requestAccounts' });
-        } else {
-          status.textContent = "📱 Nenhuma carteira injetada — abrindo WalletConnect...";
-          instance = await web3Modal.connect();
+        if (typeof window.ethereum === "undefined") {
+          status.textContent = "⚠️ Nenhuma carteira detectada. Abra em MetaMask, Brave, Coinbase ou Trust.";
+          return;
         }
 
-        provider = new ethers.BrowserProvider(instance);
+        // Solicitar conexão de contas
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+
+        // Criar provider e signer
+        provider = new ethers.BrowserProvider(window.ethereum);
         signer = await provider.getSigner();
         userAddress = await signer.getAddress();
+
         const network = await provider.getNetwork();
 
         document.getElementById("walletInfo").innerHTML =
-          `✅ Conectado: <b>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</b><br>🌐 Rede: ${network.name}`;
+          `✅ <b>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</b><br>🌐 Rede: ${network.name}`;
         status.textContent = "";
       } catch (err) {
-        console.warn("Erro ao conectar:", err);
-        if (err.message.includes("User closed modal")) {
-          status.textContent = "❌ Conexão cancelada pelo usuário.";
+        console.error("Erro ao conectar:", err);
+        if (err.code === 4001) {
+          status.textContent = "❌ Conexão rejeitada pelo usuário.";
         } else {
-          status.textContent = "⚠️ Nenhuma carteira detectada. Use navegador com Web3 (MetaMask, Coinbase, Trust, Brave).";
+          status.textContent = "⚠️ Erro ao inicializar carteira Web3.";
         }
       }
     }
 
     document.getElementById("connectBtn").addEventListener("click", connectWallet);
 
-    // Função de Mint (simulação)
+    // Simulação de Mint NFT
     document.getElementById("mintBtn").addEventListener("click", async () => {
       const file = document.getElementById("fileInput").files[0];
       if (!file) return alert("Selecione uma imagem primeiro!");
@@ -108,12 +85,11 @@
 
       document.getElementById("status").textContent = "🚀 Enviando e mintando NFT...";
 
-      // Simulação do mint (em breve adicionaremos NFT real)
       await new Promise(r => setTimeout(r, 2000));
 
       document.getElementById("status").innerHTML = `
         ✅ NFT criado com sucesso!<br>
-        <span class="text-xs">(Simulação — pronto pra integração com Base Mainnet e IPFS)</span>
+        <span class="text-xs">(Simulação — pronto pra integrar com IPFS e Base Mainnet)</span>
       `;
     });
   </script>
