@@ -1,204 +1,109 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFT Minter Simples</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-        input[type="text"], input[type="file"] { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
-        button { padding: 10px 15px; margin: 5px 0; cursor: pointer; }
-        #status { margin-top: 20px; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap; word-break: break-all; }
-        #nft-preview { max-width: 100%; height: auto; margin-top: 10px; border: 1px solid #eee; }
-    </style>
+  <meta charset="utf-8"/>
+  <title>NFT Marketplace</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
 </head>
 <body>
-    <h1>Mint NFT com Data URI</h1>
+  <h2>NFT Marketplace</h2>
+  <button id="connect">Conectar Wallet</button>
+  <div id="account"></div>
 
-    <h2>Configuração</h2>
-    <p>Preencha estas constantes no script para começar a usar.</p>
+  <h3>Listar NFT</h3>
+  <input id="nftAddress" placeholder="Endereço do NFT (ERC721)"/>
+  <input id="tokenId" placeholder="Token ID"/>
+  <input id="price" placeholder="Preço em ETH"/>
+  <button id="list">Listar</button>
 
-    <h2>1. Conexão</h2>
-    <button id="connectWalletBtn">Conectar Carteira</button>
-    <p id="walletAddressStatus">Status: Desconectado</p>
-    
-    <h2>2. Metadados e Imagem</h2>
-    <input type="text" id="nftName" placeholder="Nome do NFT (Ex: Gato Teste)">
-    <input type="text" id="nftDescription" placeholder="Descrição do NFT">
-    <input type="file" id="imageUpload" accept="image/*">
-    <button id="previewBtn">Visualizar NFT</button>
-    <img id="nft-preview" src="" alt="Prévia do NFT" style="display: none;">
+  <h3>Market Items</h3>
+  <button id="refresh">Atualizar</button>
+  <ul id="items"></ul>
 
-    <h2>3. Mint</h2>
-    <button id="mintBtn" disabled>Mintar NFT</button>
+  <script>
+    const MARKETPLACE_ADDRESS = "0x__SEU_MARKETPLACE_ADDRESS__"; // substituir após deploy
+    const MARKETPLACE_ABI = [
+      "function listItem(address nftAddress,uint256 tokenId,uint256 price) external",
+      "function buyItem(uint256 itemId) external payable",
+      "function fetchMarketItems() view returns (tuple(uint256 itemId,address nftAddress,uint256 tokenId,address seller,uint256 price,bool sold)[])",
+      "function cancelListing(uint256 itemId) external"
+    ];
+    const ERC721_ABI = [
+      "function approve(address to, uint256 tokenId) external",
+      "function ownerOf(uint256 tokenId) view returns (address)"
+    ];
 
-    <h2>Status da Transação</h2>
-    <div id="status">Pronto para começar.</div>
+    let provider, signer, signerAddress;
+    const connectBtn = document.getElementById('connect');
+    const accountDiv = document.getElementById('account');
 
-    <script>
-        // =========================================================
-        // 🚨 PASSOS OBRIGATÓRIOS: PREENCHA ESTAS DUAS CONSTANTES 🚨
-        // =========================================================
-        const CONTRACT_ADDRESS = "COLE_AQUI_O_ENDERECO_DO_SEU_CONTRATO_IMPLANTADO"; 
-        // Exemplo: "0xABC...123"
-        
-        // ABI MÍNIMA: Apenas o construtor e a função que queremos chamar.
-        const CONTRACT_ABI = [
-            // Apenas a função que o nosso contrato implementa: mintNFT(string memory tokenURI)
-            "function mintNFT(string memory tokenURI)",
-        ];
-        // =========================================================
+    async function connect() {
+      if (!window.ethereum) return alert("Instale MetaMask");
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer = provider.getSigner();
+      signerAddress = await signer.getAddress();
+      accountDiv.innerText = "Conta: " + signerAddress;
+    }
+    connectBtn.onclick = connect;
 
-        let signer;
-        let contract;
-        let dataUriCache = ''; // Armazenar a Data URI gerada para o Mint
+    async function listNFT() {
+      const nftAddress = document.getElementById('nftAddress').value;
+      const tokenId = document.getElementById('tokenId').value;
+      const priceEth = document.getElementById('price').value;
+      if (!nftAddress || !tokenId || !priceEth) return alert("Preencha campos");
 
-        const statusDiv = document.getElementById('status');
-        const walletAddressStatus = document.getElementById('walletAddressStatus');
-        const connectWalletBtn = document.getElementById('connectWalletBtn');
-        const previewBtn = document.getElementById('previewBtn');
-        const mintBtn = document.getElementById('mintBtn');
-        const nftPreview = document.getElementById('nft-preview');
+      const nftContract = new ethers.Contract(nftAddress, ERC721_ABI, signer);
+      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
 
-        /**
-         * 1. CONECTAR CARTEIRA
-         */
-        async function connectWallet() {
-            if (typeof window.ethereum === 'undefined') {
-                updateStatus("🚨 MetaMask não está instalada. Instale para prosseguir.");
-                return;
-            }
+      // approve marketplace to transfer token
+      const approveTx = await nftContract.approve(MARKETPLACE_ADDRESS, tokenId);
+      await approveTx.wait();
 
-            try {
-                // Solicita a conexão com a MetaMask
-                const provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-                await provider.send("eth_requestAccounts", []);
-                
-                signer = provider.getSigner();
-                const address = await signer.getAddress();
-                
-                // Inicializa o objeto de contrato
-                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-                
-                walletAddressStatus.textContent = `Status: Conectado como ${address.substring(0, 6)}...${address.substring(38)}`;
-                connectWalletBtn.disabled = true;
-                mintBtn.disabled = false;
-                
-                updateStatus("✅ Carteira conectada e contrato inicializado.");
+      const priceWei = ethers.utils.parseEther(priceEth);
+      const tx = await marketplace.listItem(nftAddress, tokenId, priceWei);
+      await tx.wait();
+      alert("NFT listado");
+    }
+    document.getElementById('list').onclick = listNFT;
 
-            } catch (error) {
-                updateStatus(`❌ Erro ao conectar: ${error.message}`);
-                console.error(error);
-            }
-        }
-
-        /**
-         * 2. GERAR DATA URI (Metadados + Imagem embutida)
-         */
-        function generateDataURI(base64Image) {
-            const name = document.getElementById('nftName').value;
-            const description = document.getElementById('nftDescription').value;
-
-            if (!name || !description || !base64Image) {
-                updateStatus("🚨 Preencha o nome, descrição e selecione uma imagem.");
-                return null;
-            }
-
-            // O formato JSON de metadados ERC-721
-            const metadata = {
-                name: name,
-                description: description,
-                image: base64Image, // O Base64 da imagem já está aqui
-                attributes: [] // Pode adicionar atributos aqui se quiser
-            };
-
-            // Converte o JSON em Data URI Base64
-            const jsonString = JSON.stringify(metadata);
-            const base64Metadata = btoa(jsonString);
-            
-            // Retorna a Data URI completa no formato esperado pelo contrato
-            return `data:application/json;base64,${base64Metadata}`;
-        }
-        
-        /**
-         * Função principal de Pré-visualização
-         */
-        previewBtn.onclick = () => {
-            const fileInput = document.getElementById('imageUpload');
-            const file = fileInput.files[0];
-
-            if (!file) {
-                updateStatus("🚨 Por favor, selecione um arquivo de imagem.");
-                return;
-            }
-
-            updateStatus("Carregando imagem e gerando Data URI...");
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const base64Image = event.target.result; // Data URI da imagem (ex: data:image/png;base64,...)
-                
-                // 1. Gera a Data URI completa do Metadado
-                dataUriCache = generateDataURI(base64Image); 
-                
-                if (dataUriCache) {
-                    // 2. Pré-visualiza a imagem (a Data URI da imagem pura)
-                    nftPreview.src = base64Image;
-                    nftPreview.style.display = 'block';
-                    
-                    updateStatus("✅ Prévia gerada com sucesso! \n\nURI do Metadado (Será enviada ao contrato): \n" + dataUriCache);
-                }
-            };
-            reader.onerror = (error) => {
-                updateStatus("❌ Erro ao ler o arquivo.");
-                console.error(error);
-            };
-            reader.readAsDataURL(file); // Lê o arquivo como Data URI
+    async function loadItems() {
+      if (!provider) {
+        document.getElementById('items').innerHTML = "<li>Conecte wallet</li>";
+        return;
+      }
+      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, provider);
+      const items = await marketplace.fetchMarketItems();
+      const list = document.getElementById('items');
+      list.innerHTML = "";
+      for (const it of items) {
+        const li = document.createElement('li');
+        const priceEth = ethers.utils.formatEther(it.price.toString());
+        li.innerHTML = `Item ${it.itemId} - NFT: ${it.nftAddress} #${it.tokenId} - Seller: ${it.seller} - Price: ${priceEth} ETH
+          <button data-id="${it.itemId}" class="buy">Comprar</button>`;
+        list.appendChild(li);
+      }
+      document.querySelectorAll('.buy').forEach(btn => {
+        btn.onclick = async (e) => {
+          const id = e.target.getAttribute('data-id');
+          await buyItem(id);
         };
+      });
+    }
+    document.getElementById('refresh').onclick = loadItems;
 
-
-        /**
-         * 3. MINTAR NFT (Chamar a função do contrato)
-         */
-        async function mintNFT() {
-            if (!signer || !contract) {
-                updateStatus("🚨 Conecte a carteira primeiro.");
-                return;
-            }
-            if (!dataUriCache) {
-                updateStatus("🚨 Gere a prévia do NFT antes de mintar.");
-                return;
-            }
-
-            try {
-                updateStatus("⏳ Enviando transação de mint... Confirme na MetaMask.");
-
-                // Chama a função mintNFT do seu contrato, passando a Data URI completa
-                const tx = await contract.mintNFT(dataUriCache);
-                
-                updateStatus(`✅ Transação enviada! Hash: ${tx.hash}\n\nEsperando confirmação...`);
-
-                // Espera a transação ser minerada
-                await tx.wait();
-
-                updateStatus(`🎉 NFT Mintado com Sucesso! \nToken URI: ${dataUriCache.substring(0, 100)}...\n\nVocê pode encontrar seu NFT em um explorador de blocos!`);
-
-            } catch (error) {
-                updateStatus(`❌ Erro ao mintar: ${error.message.substring(0, 150)}... Veja o console para detalhes.`);
-                console.error("Erro completo ao mintar:", error);
-            }
-        }
-
-        // --- Event Listeners ---
-        connectWalletBtn.addEventListener('click', connectWallet);
-        mintBtn.addEventListener('click', mintNFT);
-
-        function updateStatus(message) {
-            statusDiv.textContent = message;
-            console.log(message);
-        }
-        
-    </script>
+    async function buyItem(itemId) {
+      const marketplace = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
+      // fetch to know price
+      const items = await marketplace.fetchMarketItems();
+      const item = items.find(i => i.itemId.toString() === itemId.toString());
+      if (!item) return alert("Item não encontrado");
+      const price = item.price.toString();
+      const tx = await marketplace.buyItem(itemId, { value: price });
+      await tx.wait();
+      alert("Compra concluída");
+      loadItems();
+    }
+  </script>
 </body>
 </html>
